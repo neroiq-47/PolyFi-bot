@@ -99,6 +99,10 @@ export class BotContainer extends DurableObject<Env> {
   }
 }
 
+// Legacy class from the first deploy (container app polyfi-bot-polyfi). Unused; kept so the
+// namespace can be retired in a later deploy, once the live version no longer binds it.
+export class PolyFi extends DurableObject<Env> {}
+
 const bot = (env: Env) => env.POLYFI.getByName("main");
 
 export default {
