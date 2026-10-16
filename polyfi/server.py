@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from . import funds
 from .config import Settings
 from .engine import Engine
-from .feeds import CoinbaseFeed, DemoFeed
+from .feeds import CoinbaseFeed, DemoFeed, FallbackFeed, KrakenFeed
 from .gateways import DemoGateway, LiveGateway, PaperGateway
 from .store import Store
 from .streams import ChainlinkFeed
@@ -36,17 +36,22 @@ def _hostname(host: str) -> str:
 log = logging.getLogger("polyfi")
 
 
+def exchange_feed() -> FallbackFeed:
+    """Coinbase first, Kraken if Coinbase is unreachable from this server (e.g. datacenter IPs)."""
+    return FallbackFeed(CoinbaseFeed(), KrakenFeed())
+
+
 async def build_engine(settings: Settings) -> Engine:
     store = Store(settings.db_path)
     if settings.mode == "demo":
         feed = DemoFeed()
         gateway = DemoGateway(feed, settings)
     elif settings.mode == "paper":
-        feed, gateway = CoinbaseFeed(), PaperGateway()
+        feed, gateway = exchange_feed(), PaperGateway()
     elif settings.mode == "live":
         gateway = await LiveGateway.connect(settings)
         # Chainlink is what these markets resolve on; Coinbase covers gaps.
-        feed = ChainlinkFeed(gateway._client, fallback=CoinbaseFeed())
+        feed = ChainlinkFeed(gateway._client, fallback=exchange_feed())
         feed.start()
     else:
         raise ValueError("POLYFI_MODE must be demo, paper or live")

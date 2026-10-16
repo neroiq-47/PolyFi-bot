@@ -163,3 +163,71 @@ async def test_realized_pnl_today_from_series(monkeypatch):
 
     gw = LiveGateway(NS(get_user_pnl=pnl))
     assert await gw.realized_pnl_today() == -8.0
+
+
+async def test_fallback_feed_uses_next_source():
+    from polyfi.feeds import FallbackFeed, PriceFeed
+
+    class Down(PriceFeed):
+        name = "coinbase"
+
+        async def spot(self):
+            raise RuntimeError("403 Forbidden")
+
+        async def minute_closes(self, n):
+            return []
+
+        async def open_at(self, ts):
+            return None
+
+    class Up(PriceFeed):
+        name = "kraken"
+
+        async def spot(self):
+            return 101.0
+
+        async def minute_closes(self, n):
+            return [1.0, 2.0, 3.0]
+
+        async def open_at(self, ts):
+            return 100.0
+
+    f = FallbackFeed(Down(), Up())
+    assert await f.spot() == 101.0 and f.last_source == "kraken"
+    assert await f.minute_closes(60) == [1.0, 2.0, 3.0]
+    assert await f.open_at(60) == 100.0
+    g = FallbackFeed(Down(), Down())
+    with pytest.raises(RuntimeError, match="all BTC price sources failed"):
+        await g.spot()
+    assert await g.open_at(60) is None
+
+
+async def test_kraken_feed_parses_public_api():
+    from polyfi.feeds import KrakenFeed
+
+    def handler(request):
+        if request.url.path.endswith("/Ticker"):
+            return httpx.Response(200, json={"error": [], "result": {"XXBTZUSD": {"c": ["108123.4", "0.1"]}}})
+        rows = [[120, "1", "1", "1", "2", "0", "0", 1], [60, "100.5", "1", "1", "101", "0", "0", 1]]
+        return httpx.Response(200, json={"error": [], "result": {"XXBTZUSD": rows, "last": 120}})
+
+    k = KrakenFeed(httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    assert await k.spot() == 108123.4
+    assert await k.open_at(60) == 100.5
+    assert await k.minute_closes(2) == [101.0, 2.0]
+
+
+async def test_repeated_tick_errors_are_deduplicated(tmp_path):
+    import asyncio
+
+    class Broken(StubFeed):
+        async def spot(self):
+            raise RuntimeError("403 Forbidden")
+
+    s = Settings(db_path=str(tmp_path / "e.db"), tick_seconds=0.001)
+    e = Engine(s, Broken(), StubGateway(), Store(s.db_path))
+    e.start_loop()
+    await asyncio.sleep(0.2)
+    await e.stop_loop()
+    errors = [ev for ev in e.events if "tick error" in ev["msg"]]
+    assert len(errors) == 1 and "RuntimeError: 403 Forbidden" in errors[0]["msg"]

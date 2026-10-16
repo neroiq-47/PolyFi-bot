@@ -77,6 +77,7 @@ class Engine:
         self._balance: float | None = None
         self._balance_at = 0.0
         self._redeem_task: asyncio.Task | None = None
+        self._last_err, self._last_err_at, self._err_repeats = "", 0.0, 0
         self.startup_error = ""      # e.g. live mode couldn't start; shown on the dashboard
         self._ext_pnl: float | None = None
         self._ext_pnl_at = 0.0
@@ -115,8 +116,15 @@ class Engine:
                 await self.tick()
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # keep the loop alive; surface the error
-                self.note(f"tick error: {err}", "error")
+            except Exception as err:  # keep the loop alive; surface the error (once per 30s)
+                msg = f"{type(err).__name__}: {err}" if str(err) else type(err).__name__
+                now = time.time()
+                if msg != self._last_err or now - self._last_err_at >= 30:
+                    repeats = f" (repeated {self._err_repeats}×)" if self._err_repeats else ""
+                    self.note(f"tick error{repeats}: {msg}", "error")
+                    self._last_err, self._last_err_at, self._err_repeats = msg, now, 0
+                else:
+                    self._err_repeats += 1
             await asyncio.sleep(self.settings.tick_seconds)
 
     # ---- one step --------------------------------------------------------

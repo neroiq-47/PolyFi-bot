@@ -123,3 +123,80 @@ class CoinbaseFeed(PriceFeed):
 
     async def close(self) -> None:
         await self._http.aclose()
+
+
+class KrakenFeed(PriceFeed):
+    """Kraken public REST — a second, independent BTC/USD source."""
+
+    name = "kraken"
+    BASE = "https://api.kraken.com/0/public"
+
+    def __init__(self, http: httpx.AsyncClient | None = None) -> None:
+        self._http = http or httpx.AsyncClient(timeout=5.0, headers={"User-Agent": "polyfi-bot"})
+
+    async def _get(self, path: str, **params) -> dict:
+        r = await self._http.get(f"{self.BASE}/{path}", params={"pair": "XBTUSD", **params})
+        r.raise_for_status()
+        body = r.json()
+        if body.get("error"):
+            raise RuntimeError(f"kraken: {body['error']}")
+        return next(v for k, v in body["result"].items() if k != "last")
+
+    async def spot(self) -> float:
+        return float((await self._get("Ticker"))["c"][0])
+
+    async def _ohlc(self, since: int) -> list[list]:
+        return sorted(await self._get("OHLC", interval=1, since=since), key=lambda c: c[0])
+
+    async def minute_closes(self, n: int) -> list[float]:
+        rows = await self._ohlc(int(time.time()) - 60 * (n + 1))
+        return [float(c[4]) for c in rows][-n:]  # [time, open, high, low, close, vwap, volume, count]
+
+    async def open_at(self, ts: int) -> float | None:
+        minute = ts - ts % 60
+        for c in await self._ohlc(minute - 60):
+            if int(c[0]) == minute:
+                return float(c[1])
+        return None
+
+    async def close(self) -> None:
+        await self._http.aclose()
+
+
+class FallbackFeed(PriceFeed):
+    """Try each feed in order; the first that answers wins. ``last_source`` says which one."""
+
+    def __init__(self, *feeds: PriceFeed) -> None:
+        self.feeds = feeds
+        self.name = feeds[0].name
+        self.last_source = feeds[0].name
+
+    async def _first(self, method: str, *args, accept=lambda v: True):
+        errors = []
+        for feed in self.feeds:
+            try:
+                value = await getattr(feed, method)(*args)
+            except Exception as err:
+                errors.append(f"{feed.name}: {err}")
+                continue
+            if accept(value):
+                self.last_source = feed.name
+                return value
+            errors.append(f"{feed.name}: no data")
+        raise RuntimeError("all BTC price sources failed — " + "; ".join(errors))
+
+    async def spot(self) -> float:
+        return await self._first("spot")
+
+    async def minute_closes(self, n: int) -> list[float]:
+        return await self._first("minute_closes", n, accept=lambda v: len(v) >= 3)
+
+    async def open_at(self, ts: int) -> float | None:
+        try:
+            return await self._first("open_at", ts, accept=lambda v: v is not None)
+        except RuntimeError:
+            return None
+
+    async def close(self) -> None:
+        for feed in self.feeds:
+            await feed.close()
