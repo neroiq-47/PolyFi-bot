@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "polyfi",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+
+  "containers": [
+    {
+      "class_name": "PolyFi",
+      "image": "../Dockerfile",
+      "image_build_context": "..",
+      // 1/4 vCPU, 1 GiB. "lite" (256 MiB) is cheaper but tight for Python + the SDK.
+      "instance_type": "basic",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "POLYFI", "class_name": "PolyFi" }]
+  },
+  "exports": {
+    "PolyFi": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  // Keep-alive ping every minute so the bot runs 24/7.
+  "triggers": { "crons": ["* * * * *"] },
+
+  // Non-secret settings. Keys go in secrets: `npx wrangler secret put POLYFI_DASHBOARD_TOKEN` etc.
+  "vars": {
+    "POLYFI_MODE": "paper",
+    "POLYFI_WINDOW_SECONDS": "300",
+    "POLYFI_FREE_ONLY": "true",
+    "POLYFI_STAKE_USD": "5",
+    "POLYFI_MAX_DAILY_LOSS_USD": "25"
+  }
+}

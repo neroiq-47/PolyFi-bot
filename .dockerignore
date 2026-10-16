@@ -1,0 +1,9 @@
+.git
+.env
+.env.owner
+*.sqlite3
+__pycache__
+.pytest_cache
+tests
+docs
+cloudflare

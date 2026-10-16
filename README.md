@@ -12,4 +12,6 @@ pip install -e . && python -m polyfi
 
 press the button. watch the ring spin. touch grass (or don't).
 
+send it to the cloud ☁️ → [orange cloud ritual](docs/DEPLOY.md)
+
 wagmi (probably) · nfa · dyor · [lore](docs/PLAN.md)
