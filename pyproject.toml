@@ -1,7 +1,7 @@
 [project]
 name = "polyfi-bot"
 version = "0.1.0"
-description = "Simple fee-free (maker-only), gasless Polymarket BTC up/down bot with a dashboard"
+description = "5m btc goblin. zero fees. zero gas. zero chill."
 requires-python = ">=3.11"
 dependencies = [
     "polymarket-client>=0.13,<0.14",
