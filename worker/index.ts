@@ -26,6 +26,10 @@ const PASSTHROUGH = [
 ];
 
 export class PolyFi extends DurableObject<Env> {
+  // True once /healthz has answered for the current container run; steady-state
+  // requests then go straight through without an extra health check.
+  private ready = false;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     const container = ctx.container;
@@ -38,6 +42,7 @@ export class PolyFi extends DurableObject<Env> {
     const container = this.ctx.container;
     if (!container) throw new Error("No container is configured for this Durable Object");
     if (!container.running) {
+      this.ready = false;
       const env: Record<string, string> = {
         POLYFI_HOST: "0.0.0.0",
         POLYFI_PORT: String(PORT),
@@ -48,15 +53,26 @@ export class PolyFi extends DurableObject<Env> {
         if (typeof value === "string" && value) env[key] = value;
       }
       container.start({ env, enableInternet: true });
-      this.ctx.waitUntil(container.monitor().catch((err) => console.error("polyfi container stopped", err)));
+      this.ctx.waitUntil(
+        container
+          .monitor()
+          .catch((err) => console.error("polyfi container stopped", err))
+          .finally(() => {
+            this.ready = false;
+          }),
+      );
       await container.setInactivityTimeout(INACTIVITY_TIMEOUT_MS);
     }
     const port = container.getTcpPort(PORT);
+    if (this.ready) return port;
     // start() returns before the server listens; wait for /healthz (up to ~60s).
     for (let attempt = 0; attempt < 60; attempt++) {
       try {
         const res = await port.fetch("http://container/healthz");
-        if (res.ok) return port;
+        if (res.ok) {
+          this.ready = true;
+          return port;
+        }
       } catch {
         // not listening yet
       }
@@ -68,7 +84,12 @@ export class PolyFi extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     try {
       const port = await this.ensureRunning();
-      return await port.fetch(request);
+      try {
+        return await port.fetch(request);
+      } catch (err) {
+        this.ready = false; // re-check health on the next request
+        throw err;
+      }
     } catch (err) {
       return new Response(`PolyFi is starting or unavailable: ${err}`, { status: 503 });
     }
