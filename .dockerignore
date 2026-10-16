@@ -6,4 +6,10 @@ __pycache__
 .pytest_cache
 tests
 docs
-cloudflare
+worker
+node_modules
+.wrangler
+package.json
+package-lock.json
+wrangler.jsonc
+tsconfig.json

@@ -1,15 +1,14 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "polyfi-bot",
-  "main": "src/index.ts",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
 
   "containers": [
     {
       "class_name": "PolyFi",
-      "image": "../Dockerfile",
-      "image_build_context": "..",
+      "image": "./Dockerfile",
       // 1/4 vCPU, 1 GiB. "lite" (256 MiB) is cheaper but tight for Python + the SDK.
       "instance_type": "basic",
       "max_instances": 1

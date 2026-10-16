@@ -1,6 +1,6 @@
 # Deploy to Cloudflare
 
-PolyFi runs on **Cloudflare Containers**. A small Worker (`cloudflare/src/index.ts`) sits in front of one always-on container that runs the bot and dashboard (`Dockerfile`). A cron trigger pings the container every minute so it never sleeps.
+PolyFi runs on **Cloudflare Containers**. A small Worker (`worker/index.ts`) sits in front of one always-on container that runs the bot and dashboard (`Dockerfile`). A cron trigger pings the container every minute so it never sleeps.
 
 ## Cost
 
@@ -9,7 +9,6 @@ You need the **Workers Paid plan ($5/mo)**. The default `basic` instance (¼ vCP
 ## Option A: from your computer (Docker running)
 
 ```bash
-cd cloudflare
 npm ci
 npx wrangler login
 npx wrangler secret put POLYFI_DASHBOARD_TOKEN      # required: any long random string
@@ -26,11 +25,11 @@ Open the `https://polyfi-bot.<your-subdomain>.workers.dev` URL that wrangler pri
 
 ## Option C: Cloudflare's Git integration (Workers Builds)
 
-If you connected this repo in the Cloudflare dashboard, go to **Workers & Pages → polyfi-bot → Settings → Build**. Set **Root directory** to `cloudflare` and leave the deploy command as `npx wrangler deploy`. The Worker name in `cloudflare/wrangler.jsonc` (`polyfi-bot`) must match the Worker's name in Cloudflare. Add the secrets under **Settings → Variables and Secrets**.
+If you connected this repo in the Cloudflare dashboard, the default build settings work: Root directory is the repo root, and the deploy command is `npx wrangler deploy`. The Worker name in `wrangler.jsonc` (`polyfi-bot`) must match the Worker's name in Cloudflare. Add the secrets under **Workers & Pages → polyfi-bot → Settings → Variables and Secrets**.
 
 ## Going live
 
-The deploy starts in **paper** mode, set by `vars.POLYFI_MODE` in `cloudflare/wrangler.jsonc`. To trade for real:
+The deploy starts in **paper** mode, set by `vars.POLYFI_MODE` in `wrangler.jsonc`. To trade for real:
 
 * Add the key secrets. The session-key setup is recommended, because a session key can't withdraw.
 * Change the mode to `live` and redeploy.
