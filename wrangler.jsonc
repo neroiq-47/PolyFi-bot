@@ -18,7 +18,9 @@
     "bindings": [{ "name": "POLYFI", "class_name": "BotContainer" }]
   },
   "exports": {
-    "BotContainer": { "type": "durable-object", "storage": "sqlite" }
+    "BotContainer": { "type": "durable-object", "storage": "sqlite" },
+    // Retired: the old class name (its namespace was provisioned by an earlier deploy).
+    "PolyFi": { "type": "durable-object", "state": "deleted" }
   },
 
   // Keep-alive ping every minute so the bot runs 24/7.
