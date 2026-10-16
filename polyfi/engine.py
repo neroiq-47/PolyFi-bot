@@ -77,6 +77,8 @@ class Engine:
         self._balance: float | None = None
         self._balance_at = 0.0
         self._redeem_task: asyncio.Task | None = None
+        self._paused_until = 0.0     # exchange asked us to back off (matching-engine restart etc.)
+        self._restart_backoff = 0.0
 
     # ---- lifecycle -------------------------------------------------------
     def start_loop(self) -> None:
@@ -212,7 +214,8 @@ class Engine:
 
     async def _maybe_enter(self, p_up: float, up: Book, down: Book, elapsed: float, left: float) -> dict:
         s, w = self.settings, self.window
-        d = decide(p_up, up.bid, up.ask, down.bid, down.ask, min_edge=s.min_edge, free_only=s.free_only, tick=w.market.tick)
+        d = decide(p_up, up.bid, up.ask, down.bid, down.ask, min_edge=s.min_edge, free_only=s.free_only, tick=w.market.tick,
+                   fee_rate=w.market.fee_rate)
         signal = {"action": "hold", "side": d.side, "price": d.price, "edge": d.edge, "reason": d.reason}
 
         blocker = None
@@ -220,6 +223,10 @@ class Engine:
             blocker = "bot paused"
         elif self.halted_reason:
             blocker = self.halted_reason
+        elif time.time() < self._paused_until:
+            blocker = "exchange restarting — waiting to retry"
+        elif not w.market.accepting_orders:
+            blocker = "market not accepting orders"
         elif not self._sigma_ok():
             blocker = "no volatility estimate yet"
         elif w.position is not None:
@@ -244,7 +251,8 @@ class Engine:
             return signal
 
         asset = w.market.up_asset if d.side == "UP" else w.market.down_asset
-        size = max(w.market.min_size, round(s.stake_usd / d.price, 2))
+        # Docs: round the share quantity DOWN to 2 decimals.
+        size = max(w.market.min_size, math.floor(s.stake_usd / d.price * 100 + 1e-9) / 100)
         if size * d.price > await self._cached_balance():
             signal["reason"] = "insufficient balance"
             return signal
@@ -262,17 +270,29 @@ class Engine:
                 if shares <= 0:
                     signal["reason"] = "taker order not filled"
                     return signal
-                fee = taker_fee(shares, avg)
+                fee = taker_fee(shares, avg, w.market.fee_rate)
                 tid = self.store.add(mode=self.gw.name, slug=w.market.slug, window_start=w.market.start, side=d.side,
                                      kind="taker", price=avg, shares=shares, cost=shares * avg + fee, fee=fee, status="filled")
                 w.position = Position(tid, d.side, asset, avg, shares, filled=shares, fee=fee, resting=False)
                 self.note(f"took BUY {d.side} {shares} @ {avg:.2f} (fee ${fee:.3f})")
         except Exception as err:
+            restriction = getattr(err, "restriction", None)
+            if restriction:
+                # Matching-engine restart / cancel-only / post-only window: transient, so it doesn't
+                # use up an attempt. Honor the server's Retry-After, else back off 2s → 30s.
+                w.attempts -= 1
+                retry = getattr(err, "retry_after", None)
+                self._restart_backoff = min(30.0, max(2.0, self._restart_backoff * 2))
+                self._paused_until = time.time() + (retry if retry else self._restart_backoff)
+                self.note(f"exchange {restriction}: pausing entries {self._paused_until - time.time():.0f}s", "warn")
+                signal["reason"] = f"exchange {restriction}"
+                return signal
             self.note(f"order failed: {err}", "error")
             signal["reason"] = "order failed"
             return signal
         finally:
             self._invalidate_balance()  # an order (attempt) moves/reserves funds
+        self._restart_backoff = 0.0
         signal["action"] = "entered"
         return signal
 

@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from .config import PUSD_ADDRESS, Settings
 from .feeds import PriceFeed
-from .model import prob_up
+from .model import CRYPTO_TAKER_FEE_RATE, prob_up
 
 log = logging.getLogger("polyfi.gateway")
 
@@ -29,6 +29,8 @@ class WindowMarket:
     tick: float = 0.01
     min_size: float = 5.0
     question: str = ""
+    accepting_orders: bool = True   # docs: trade only if active, not closed and accepting orders
+    fee_rate: float = CRYPTO_TAKER_FEE_RATE  # from the market's fee_schedule (0 when fees are off)
 
 
 @dataclass
@@ -308,6 +310,9 @@ async def _find_market(client, slug: str, start: int, end: int) -> WindowMarket 
     except PolymarketError as err:
         log.info("market %s not found: %s", slug, err)
         return None
+    if m.state.closed:
+        log.info("market %s is closed", slug)
+        return None
     outcomes = {o.label.strip().lower(): o for o in (m.outcomes.yes, m.outcomes.no)}
     up, down = outcomes.get("up"), outcomes.get("down")
     if up is None or down is None:
@@ -325,7 +330,16 @@ async def _find_market(client, slug: str, start: int, end: int) -> WindowMarket 
         tick=float(m.trading.minimum_tick_size or Decimal("0.01")),
         min_size=float(m.trading.minimum_order_size or Decimal("5")),
         question=m.question or slug,
+        accepting_orders=m.state.active is not False and not m.state.closed and m.state.accepting_orders is not False,
+        fee_rate=_fee_rate(m.trading),
     )
+
+
+def _fee_rate(trading) -> float:
+    if trading.fees_enabled is False:
+        return 0.0
+    schedule = trading.fee_schedule
+    return CRYPTO_TAKER_FEE_RATE if schedule is None else float(schedule.rate)
 
 
 async def _book(client, asset: str) -> Book:

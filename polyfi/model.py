@@ -99,6 +99,7 @@ def decide(
     min_edge: float,
     free_only: bool,
     tick: float = 0.01,
+    fee_rate: float = CRYPTO_TAKER_FEE_RATE,
 ) -> Decision:
     """Pick the side with the larger edge.
 
@@ -127,7 +128,7 @@ def decide(
             if ask is None:
                 continue
             price = _from_ticks(_ticks(ask, tick), tick)
-            cost = price + taker_fee(1, price)
+            cost = price + taker_fee(1, price, fee_rate)
         edge = fair - cost
         if edge >= min_edge - 1e-9 and edge > best.edge:
             best = Decision(side, p_up, price, round(edge, 4), "maker" if free_only else "taker")

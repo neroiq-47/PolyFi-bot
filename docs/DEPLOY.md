@@ -25,7 +25,13 @@ Open the `https://polyfi-bot.<your-subdomain>.workers.dev` URL that wrangler pri
 
 ## Option C: Cloudflare's Git integration (Workers Builds)
 
-If you connected this repo in the Cloudflare dashboard, the default build settings work: Root directory is the repo root, and the deploy command is `npx wrangler deploy`. The Worker name in `wrangler.jsonc` (`polyfi-bot`) must match the Worker's name in Cloudflare. Add the secrets under **Workers & Pages → polyfi-bot → Settings → Variables and Secrets**.
+If you connected this repo in the Cloudflare dashboard, go to **Workers & Pages → polyfi-bot → Settings → Build** and check three things:
+
+1. **API token: add Containers access.** The token Workers Builds creates by default only has Account Settings (read), Workers Scripts, KV and R2 (edit). Wrangler also has to register the container, so edit the token and add **Account → Containers: Edit**. Without it, the deploy fails at `/accounts/…/containers/me`.
+2. **Deploy commands.** The production deploy command should be `npx wrangler deploy`, with the Root directory left as the repo root. For non-production branches, set the command to `npx wrangler versions upload` or turn those builds off. Otherwise every pushed branch deploys straight to production.
+3. **Worker name.** The name in `wrangler.jsonc` (`polyfi-bot`) must match the Worker's name in Cloudflare.
+
+Add the secrets under **Settings → Variables and Secrets**.
 
 ## Going live
 
@@ -39,4 +45,5 @@ The deploy starts in **paper** mode, set by `vars.POLYFI_MODE` in `wrangler.json
 * **The dashboard is public.** Only the token protects it, so make it long. For a second lock, put the URL behind **Cloudflare Access** (Zero Trust → Access → Applications). It's free for up to 50 users.
 * **Container disk is temporary.** The trade journal and recorded ticks (`/data/polyfi.sqlite3`) are wiped when the container restarts or redeploys. Your money and positions are safe, because they live on Polymarket, not in the container.
 * **Location.** Cloudflare decides where the container runs. Polymarket blocks some regions, so live orders can be rejected depending on that location. Its terms apply to you as the user, wherever the server runs. The bot does not route around geoblocks.
+* **"A request to the Cloudflare API (/accounts/…/containers/me) failed"** at the end of a deploy means the image built and the Worker uploaded, but the container couldn't be registered. Either the account isn't on Workers Paid, or the build's API token lacks **Containers: Edit** (see Option C). Fix whichever applies, then retry the build.
 * **Logs.** Go to Workers & Pages → Containers → polyfi-bot in the dashboard, or run `npx wrangler tail`.
