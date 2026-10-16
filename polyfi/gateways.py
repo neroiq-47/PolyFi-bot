@@ -213,9 +213,10 @@ class LiveGateway(_Streaming, Gateway):
     name = "live"
     simulated = False
 
-    def __init__(self, client, session_key: bool = False) -> None:  # AsyncSecureClient
+    def __init__(self, client, session_key: bool = False, builder_code: str = "") -> None:  # AsyncSecureClient
         self._client = client
         self.session_key = session_key
+        self.builder_code = builder_code or None
 
     @classmethod
     async def connect(cls, settings: Settings) -> "LiveGateway":
@@ -232,7 +233,7 @@ class LiveGateway(_Streaming, Gateway):
             client = await AsyncSecureClient.create(
                 private_key=settings.session_private_key, wallet=settings.wallet_address
             )
-            return cls(client, session_key=True)
+            return cls(client, session_key=True, builder_code=settings.builder_code)
         client = await AsyncSecureClient.create(
             private_key=settings.signer_private_key,
             wallet=settings.wallet_address or None,
@@ -240,7 +241,7 @@ class LiveGateway(_Streaming, Gateway):
         )
         # Idempotent; gasless via relayer. Lets the exchange spend pUSD / outcome tokens.
         await client.setup_trading_approvals()
-        return cls(client)
+        return cls(client, builder_code=settings.builder_code)
 
     @property
     def wallet(self) -> str:
@@ -251,7 +252,8 @@ class LiveGateway(_Streaming, Gateway):
 
     async def buy_maker(self, asset: str, price: float, size: float) -> str:
         resp = await self._client.place_limit_order(
-            asset_id=asset, price=Decimal(str(price)), size=Decimal(str(size)), side="BUY", post_only=True
+            asset_id=asset, price=Decimal(str(price)), size=Decimal(str(size)), side="BUY", post_only=True,
+            builder_code=self.builder_code,
         )
         if not resp.ok:
             raise RuntimeError(f"order rejected: {resp.code} {resp.message}")
@@ -259,7 +261,8 @@ class LiveGateway(_Streaming, Gateway):
 
     async def buy_taker(self, asset: str, usd: float, max_price: float) -> tuple[float, float]:
         resp = await self._client.place_market_order(
-            asset_id=asset, side="BUY", amount=Decimal(str(usd)), max_price=Decimal(str(max_price)), order_type="FAK"
+            asset_id=asset, side="BUY", amount=Decimal(str(usd)), max_price=Decimal(str(max_price)), order_type="FAK",
+            builder_code=self.builder_code,
         )
         if not resp.ok:
             raise RuntimeError(f"order rejected: {resp.code} {resp.message}")

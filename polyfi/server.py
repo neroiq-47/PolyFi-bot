@@ -156,7 +156,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not isinstance(e.gw, LiveGateway):
             return {"mode": e.gw.name, "wallet": None, "addresses": {}}
         try:
-            addresses = await funds.deposit_addresses(e.gw.wallet)
+            addresses = await funds.deposit_addresses(e.gw.wallet, e.gw.builder_code)
         except Exception as err:
             log.warning("deposit address lookup failed: %s", err)
             addresses = {}
