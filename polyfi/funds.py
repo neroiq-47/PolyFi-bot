@@ -22,8 +22,8 @@ async def deposit_addresses(wallet: str) -> dict:
 
 async def withdraw_usdc_polygon(gateway, wallet: str, recipient: str, amount_usd: float) -> dict:
     """Withdraw as native USDC on Polygon (e.g. to a Coinbase USDC deposit address, Polygon network)."""
-    if amount_usd < 1:
-        raise ValueError("minimum withdrawal is $1")
+    if amount_usd < 2:  # bridge minCheckoutUsd for Polygon (docs: /supported-assets)
+        raise ValueError("minimum withdrawal is $2")
     if not (recipient.startswith("0x") and len(recipient) == 42):
         raise ValueError("recipient must be a 0x… Polygon address")
     async with httpx.AsyncClient(timeout=15) as http:
