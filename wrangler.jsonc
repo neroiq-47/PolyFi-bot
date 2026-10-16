@@ -33,6 +33,7 @@
     "POLYFI_MAX_DAILY_LOSS_USD": "25",
     // Public identifiers (safe to commit). Keys/secrets go in Settings → Variables and Secrets.
     "POLYMARKET_RELAYER_API_KEY_ADDRESS": "0x554bb7c00683f8628dd8b268821009eac218f216",
+    "POLYMARKET_WALLET_ADDRESS": "0x58f50BC95659Dad165D17e5F1e8DBcc5eb9F373C",
     "POLYMARKET_BUILDER_CODE": "0x29e86cba8157e0d4ac968bac6a8a0d0baae3230da8191e753dde2fe2d69a22a4"
   }
 }
