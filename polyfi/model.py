@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 from dataclasses import dataclass
 
 # Crypto category taker fee rate from docs.polymarket.com/trading/fees (Oct 2026).
@@ -29,10 +30,16 @@ def prob_up(price: float, open_price: float, sigma_per_s: float, seconds_left: f
 
     Up wins ties, so at the very end an exactly-equal price counts as Up.
     """
+    if not all(math.isfinite(x) for x in (price, open_price, seconds_left)):
+        return 0.5
     if price <= 0 or open_price <= 0:
         return 0.5
-    if seconds_left <= 0 or sigma_per_s <= 0:
+    if seconds_left <= 0:
         return 1.0 if price >= open_price else 0.0
+    # No (or broken) volatility estimate: we know nothing about the outcome yet.
+    # Returning 1/0 here would fake a huge edge, so stay neutral.
+    if not math.isfinite(sigma_per_s) or sigma_per_s <= 0:
+        return 0.5
     z = math.log(price / open_price) / (sigma_per_s * math.sqrt(seconds_left))
     return min(0.995, max(0.005, norm_cdf(z)))
 
@@ -58,6 +65,21 @@ def round_down_to_tick(price: float, tick: float) -> float:
     return round(math.floor(round(price / tick, 6)) * tick, 6)
 
 
+def _tick_decimals(tick: float) -> int:
+    exp = Decimal(repr(tick)).normalize().as_tuple().exponent
+    return max(0, -int(exp))
+
+
+def _ticks(price: float, tick: float) -> int:
+    """Book price -> whole number of ticks (book prices sit on the grid)."""
+    return int(round(price / tick))
+
+
+def _from_ticks(n: int, tick: float) -> float:
+    """Whole ticks -> clean float on the tick grid (e.g. 0.56, not 0.5599999999999999)."""
+    return round(n * tick, _tick_decimals(tick))
+
+
 @dataclass
 class Decision:
     side: str | None          # "UP", "DOWN" or None
@@ -81,26 +103,32 @@ def decide(
     """Pick the side with the larger edge.
 
     free_only: join the book one tick above the best bid but never cross the ask
-    (post-only maker order → no fee). Otherwise take the ask and pay the fee.
+    (post-only maker order → no fee); on a 1-tick spread, join the bid itself.
+    Otherwise take the ask and pay the fee. Returned prices sit exactly on the tick grid.
     """
     best: Decision = Decision(None, p_up, reason="no edge")
+    # All price arithmetic happens in integer ticks so results land exactly on the grid.
     for side, fair, bid, ask in (("UP", p_up, up_bid, up_ask), ("DOWN", 1 - p_up, down_bid, down_ask)):
         if free_only:
             if bid is None:
                 continue
-            price = round(bid + tick, 6)
-            if ask is not None and price >= ask:
-                price = ask - tick
-            price = min(price, round_down_to_tick(fair - min_edge, tick))
-            if price < tick or (bid is not None and price < bid):
+            b = _ticks(bid, tick)
+            n = b + 1
+            if ask is not None and n >= _ticks(ask, tick):
+                # 1-tick spread: can't improve without crossing, so join the bid.
+                n = _ticks(ask, tick) - 1
+            cap = math.floor(round((fair - min_edge) / tick, 6))
+            n = min(n, cap)
+            if n < 1 or n < b:
                 continue
+            price = _from_ticks(n, tick)
             cost = price
         else:
             if ask is None:
                 continue
-            price = ask
-            cost = ask + taker_fee(1, ask)
+            price = _from_ticks(_ticks(ask, tick), tick)
+            cost = price + taker_fee(1, price)
         edge = fair - cost
         if edge >= min_edge - 1e-9 and edge > best.edge:
-            best = Decision(side, p_up, round(price, 4), round(edge, 4), "maker" if free_only else "taker")
+            best = Decision(side, p_up, price, round(edge, 4), "maker" if free_only else "taker")
     return best

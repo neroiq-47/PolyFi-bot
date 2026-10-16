@@ -101,6 +101,7 @@ td { padding: 7px 4px; border-bottom: 1px solid var(--line); white-space: nowrap
     <span id="mode" class="badge">DEMO</span>
     <span id="freeBadge" class="badge free">FREE MODE · $0 FEES</span>
     <div class="spacer"></div>
+    <button class="btn-ghost" id="tokenBtn" style="display:none" title="Enter dashboard token">Enter token</button>
     <button class="btn-ghost" id="theme" title="Toggle theme">◐</button>
     <button class="btn-main" id="toggle">Start bot</button>
   </header>
@@ -199,15 +200,24 @@ td { padding: 7px 4px; border-bottom: 1px solid var(--line); white-space: nowrap
 const $ = (id) => document.getElementById(id);
 const usd = (v, d = 2) => v == null ? "—" : (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const cents = (v) => v == null ? "—" : (v * 100).toFixed(0) + "¢";
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 let token = "";
 try { token = localStorage.getItem("polyfiToken") || ""; } catch (e) {}
-let settingsLoaded = false, last = null;
+let settingsLoaded = false, last = null, authPaused = false;
 
+// Ask for the token once; if the prompt is cancelled, stop polling until "Enter token" is clicked.
+function askToken() {
+  if (authPaused) return;
+  const t = prompt("Dashboard token");
+  if (t === null) { authPaused = true; $("tokenBtn").style.display = ""; return; }
+  token = t.trim();
+  try { localStorage.setItem("polyfiToken", token); } catch (e) {}
+}
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Polyfi-Token": token, ...(opts.headers || {}) } });
+  // The X-Polyfi-Token header is always sent (even empty): the server requires it as CSRF protection.
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), "Content-Type": "application/json", "X-Polyfi-Token": token } });
   if (res.status === 401) {
-    token = prompt("Dashboard token") || "";
-    try { localStorage.setItem("polyfiToken", token); } catch (e) {}
+    askToken();
     throw new Error("auth");
   }
   const data = await res.json();
@@ -267,10 +277,11 @@ function render(s) {
 
   $("trades").innerHTML = s.trades.length ? s.trades.map((t) => {
     const cls = t.status === "won" ? "won" : t.status === "lost" ? "lost" : "other";
-    return `<tr><td>${new Date(t.created_at * 1000).toLocaleTimeString()}</td><td class="${t.side === "UP" ? "pos" : "neg"}">${t.side}</td><td>${t.kind}</td><td>${cents(t.price)}</td><td>${(+t.shares).toFixed(2)}</td><td>${usd(t.fee, 3)}</td><td><span class="pill ${cls}">${t.status}</span></td><td class="${t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""}">${t.pnl == null ? "—" : usd(t.pnl)}</td></tr>`;
+    return `<tr><td>${new Date(t.created_at * 1000).toLocaleTimeString()}</td><td class="${t.side === "UP" ? "pos" : "neg"}">${esc(t.side)}</td><td>${esc(t.kind)}</td><td>${cents(t.price)}</td><td>${(+t.shares).toFixed(2)}</td><td>${usd(t.fee, 3)}</td><td><span class="pill ${cls}">${esc(t.status)}</span></td><td class="${t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""}">${t.pnl == null ? "—" : usd(t.pnl)}</td></tr>`;
   }).join("") : '<tr><td colspan="8" class="sub">No trades yet</td></tr>';
 
-  $("log").innerHTML = s.events.map((e) => `<div class="${e.level}"><span class="t">${new Date(e.ts * 1000).toLocaleTimeString()}</span>${e.msg.replace(/</g, "&lt;")}</div>`).join("");
+  const levels = { info: "info", warn: "warn", error: "error" };
+  $("log").innerHTML = s.events.map((e) => `<div class="${levels[e.level] || ""}"><span class="t">${new Date(e.ts * 1000).toLocaleTimeString()}</span>${esc(e.msg)}</div>`).join("");
   drawChart(s.prices, snap.open_price);
 }
 
@@ -303,6 +314,7 @@ function drawChart(points, openPrice) {
 }
 
 async function poll() {
+  if (authPaused) return;
   try { render(await api("/api/state")); } catch (e) { if (e.message !== "auth") console.warn(e); }
 }
 
@@ -344,10 +356,19 @@ async function loadDeposit() {
     const d = await api("/api/deposit");
     if (d.mode !== "live" || !d.wallet) return;
     const a = d.addresses || {};
-    $("depAddr").innerHTML = (a.evm ? `<b>Send USDC here (Polygon network)</b><div class="addr">${a.evm}</div>` : "") +
-      `<span>Trading wallet (info only): ${d.wallet}</span>`;
+    // Third-party (bridge API) data: build nodes with textContent, never innerHTML.
+    const box = $("depAddr"), el = (tag, text, cls) => { const n = document.createElement(tag); n.textContent = text; if (cls) n.className = cls; return n; };
+    box.replaceChildren();
+    if (a.evm) box.append(el("b", "Send USDC here (Polygon network)"), el("div", String(a.evm), "addr"));
+    box.append(el("span", "Trading wallet (info only): " + String(d.wallet)));
   } catch (e) {}
 }
+$("tokenBtn").onclick = () => {
+  authPaused = false;
+  $("tokenBtn").style.display = "none";
+  askToken();
+  if (!authPaused) { poll(); loadDeposit(); }
+};
 poll(); loadDeposit();
 setInterval(poll, 1000);
 window.addEventListener("resize", () => last && drawChart(last.prices, last.snapshot.open_price));

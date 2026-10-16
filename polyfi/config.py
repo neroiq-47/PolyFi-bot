@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -124,6 +125,10 @@ class Settings:
         return owner or self.uses_session_key
 
     def update(self, changes: dict) -> None:
+        """Validate every change first; apply all of them only if all are valid (atomic)."""
+        if not isinstance(changes, dict):
+            raise TypeError("settings changes must be an object")
+        new: dict = {}
         for key, value in changes.items():
             if key not in self.EDITABLE:
                 raise ValueError(f"{key} cannot be changed from the dashboard")
@@ -131,9 +136,18 @@ class Settings:
             if isinstance(current, bool):
                 value = value if isinstance(value, bool) else str(value).lower() in {"1", "true", "yes", "on"}
             else:
-                value = type(current)(value)
+                try:
+                    value = type(current)(value)
+                except OverflowError:  # int(float("inf"))
+                    raise ValueError(f"{key} must be a finite number") from None
+                if not math.isfinite(value):
+                    raise ValueError(f"{key} must be a finite number")
                 if value < 0:
                     raise ValueError(f"{key} must be >= 0")
-            setattr(self, key, value)
-        if self.stake_usd < 1:
+            new[key] = value
+        if new.get("stake_usd", self.stake_usd) < 1:
             raise ValueError("stake_usd must be at least 1 (Polymarket minimum order)")
+        if new.get("min_edge", self.min_edge) >= 1:
+            raise ValueError("min_edge must be < 1")
+        for key, value in new.items():
+            setattr(self, key, value)

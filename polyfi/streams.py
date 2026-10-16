@@ -50,9 +50,16 @@ class BookCache:
         elif kind == "best_bid_ask":
             self._set(p.asset_id, p.best_bid, p.best_ask)
         elif kind == "price_change":
+            # A price_change may carry only one side; keep the cached value for the other.
             for ch in p.price_changes:
-                if ch.best_bid is not None or ch.best_ask is not None:
-                    self._set(ch.asset_id, ch.best_bid, ch.best_ask)
+                bid, ask = ch.best_bid, ch.best_ask
+                if bid is None and ask is None:
+                    continue
+                prev = self._books.get(str(ch.asset_id))
+                if prev is not None:
+                    bid = prev[0] if bid is None else bid
+                    ask = prev[1] if ask is None else ask
+                self._set(ch.asset_id, bid, ask)
 
     def watch(self, client, assets: tuple[str, ...]) -> None:
         """(Re)subscribe when the window's assets change."""
