@@ -5,9 +5,9 @@ description = "5m btc goblin. zero fees. zero gas. zero chill."
 requires-python = ">=3.11"
 dependencies = [
     "polymarket-client>=0.13,<0.14",
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
-    "httpx>=0.27",
+    "fastapi>=0.110,<1",
+    "uvicorn>=0.29,<1",
+    "httpx>=0.27,<1",
 ]
 
 [project.optional-dependencies]

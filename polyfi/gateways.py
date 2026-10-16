@@ -222,6 +222,7 @@ class LiveGateway(_Streaming, Gateway):
     async def connect(cls, settings: Settings) -> "LiveGateway":
         from polymarket import AsyncSecureClient, RelayerApiKey
 
+        await check_geoblock()
         if not settings.live_ready:
             raise RuntimeError(
                 "Live mode needs SIGNER_PRIVATE_KEY + POLYMARKET_RELAYER_API_KEY(_ADDRESS), "
@@ -292,6 +293,19 @@ class LiveGateway(_Streaming, Gateway):
             count += 1
         return count
 
+    async def realized_pnl_today(self) -> float | None:
+        """Today's (UTC) realized PnL from Polymarket itself — survives bot/container restarts."""
+        import datetime as dt
+
+        series = await self._client.get_user_pnl(interval="1d", fidelity="1h")
+        points = sorted(series.points, key=lambda p: p.timestamp)
+        if not points:
+            return None
+        midnight = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        before = [p for p in points if p.timestamp <= midnight]
+        base = before[-1] if before else points[0]
+        return float(points[-1].realized_pnl - base.realized_pnl)
+
     async def transfer_pusd(self, to_address: str, amount_usd: float):
         if self.session_key:
             raise ValueError("session keys cannot withdraw — withdraw from polymarket.com or run with the owner key")
@@ -303,6 +317,31 @@ class LiveGateway(_Streaming, Gateway):
     async def close(self) -> None:
         await self._close_stream()
         await self._client.close()
+
+
+GEOBLOCK_URL = "https://polymarket.com/api/geoblock"
+
+
+async def check_geoblock() -> None:
+    """Refuse live mode where Polymarket blocks trading (docs: /api-reference/geoblock).
+
+    This only reports the server's location — it never routes around a block. If the check
+    itself can't be reached, carry on: the exchange enforces the block anyway.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as http:
+            geo = (await http.get(GEOBLOCK_URL)).json()
+    except Exception as err:  # network/format problems: don't block startup on the check itself
+        log.warning("geoblock check unavailable: %s", err)
+        return
+    if geo.get("blocked"):
+        where = "-".join(x for x in (geo.get("country"), geo.get("region")) if x)
+        raise RuntimeError(
+            f"Polymarket blocks trading from this server's location ({where or 'unknown'}). "
+            "Live mode is disabled; only run live where Polymarket permits you to trade."
+        )
 
 
 async def _find_market(client, slug: str, start: int, end: int) -> WindowMarket | None:

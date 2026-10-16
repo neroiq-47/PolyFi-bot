@@ -235,8 +235,9 @@ function render(s) {
   const tg = $("toggle");
   tg.textContent = s.running ? "Pause bot" : "Start bot";
   tg.className = "btn-main" + (s.running ? " stop" : "");
-  $("halt").style.display = s.halted ? "block" : "none";
-  $("halt").textContent = s.halted ? "⛔ " + s.halted + " — press Start to re-arm." : "";
+  const warn = s.startup_error ? "⚠️ " + s.startup_error : s.halted ? "⛔ " + s.halted + " — press Start to re-arm." : "";
+  $("halt").style.display = warn ? "block" : "none";
+  $("halt").textContent = warn;
 
   $("kBal").textContent = usd(snap.balance);
   $("kToday").textContent = usd(st.today_pnl);

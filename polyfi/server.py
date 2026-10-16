@@ -9,6 +9,7 @@ import hmac
 import logging
 import math
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -57,8 +58,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        engine = await build_engine(settings)
+        try:
+            engine = await build_engine(settings)
+        except Exception as err:
+            if settings.mode != "live":
+                raise
+            # Don't crash-loop the container (dashboard would just say "unavailable"):
+            # come up in PAPER mode with the reason on screen. No real orders are possible.
+            log.error("live mode failed to start: %s", err)
+            engine = await build_engine(replace(settings, mode="paper"))
+            engine.startup_error = f"Live mode failed to start: {err} — running in PAPER mode (no real orders)."
+            engine.note(engine.startup_error, "error")
         app.state.engine = engine
+        if settings.autostart and not engine.startup_error:
+            engine.running = True
+            engine.note("autostart: trading resumed after (re)start")
         engine.start_loop()
         try:
             yield
@@ -178,8 +192,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, "amount must be a positive number")
         if not isinstance(e.gw, LiveGateway):
             raise HTTPException(400, "withdrawals only work in live mode")
+        recipient = str(body.get("recipient", "")).strip()
+        if settings.withdraw_address:
+            if recipient.lower() != settings.withdraw_address:
+                raise HTTPException(403, "withdrawals are locked to POLYFI_WITHDRAW_ADDRESS")
+        elif _hostname(settings.host.lower()) not in LOOPBACK_HOSTS:
+            # Public dashboard: a leaked token must not be able to send funds anywhere.
+            raise HTTPException(403, "set POLYFI_WITHDRAW_ADDRESS to enable withdrawals on a public dashboard")
         try:
-            result = await funds.withdraw_usdc_polygon(e.gw, e.gw.wallet, str(body.get("recipient", "")), amount)
+            result = await funds.withdraw_usdc_polygon(e.gw, e.gw.wallet, recipient, amount)
         except ValueError as err:
             raise HTTPException(400, str(err)) from err
         e.note(f"withdrew ${result['amount']:.2f} USDC (Polygon) → {result['recipient'][:10]}…")

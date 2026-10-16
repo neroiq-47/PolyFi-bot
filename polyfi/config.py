@@ -33,6 +33,13 @@ def _builder_code(value: str) -> str:
     return value.lower()
 
 
+def _address(value: str) -> str:
+    value = value.strip()
+    if value and not re.fullmatch(r"0x[0-9a-fA-F]{40}", value):
+        raise ValueError("POLYFI_WITHDRAW_ADDRESS must be a 0x… address (40 hex characters)")
+    return value.lower()
+
+
 def _bool(name: str, default: bool) -> bool:
     return os.environ.get(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -69,6 +76,10 @@ class Settings:
     relayer_api_key_address: str = ""
     # Public builder code (bytes32 hex) — attributes orders and bridge transfers to your app.
     builder_code: str = ""
+    # Only address the dashboard may withdraw to. Required for withdrawals on a non-local dashboard.
+    withdraw_address: str = ""
+    # Resume trading automatically after a (re)start — e.g. a Cloudflare container restart.
+    autostart: bool = False
     # Optional: trade with a scoped session key instead (cannot withdraw). See polyfi/session_key.py
     session_private_key: str = field(default="", repr=False)
 
@@ -101,6 +112,8 @@ class Settings:
             relayer_api_key=e("POLYMARKET_RELAYER_API_KEY", ""),
             relayer_api_key_address=e("POLYMARKET_RELAYER_API_KEY_ADDRESS", ""),
             builder_code=_builder_code(e("POLYMARKET_BUILDER_CODE", "")),
+            withdraw_address=_address(e("POLYFI_WITHDRAW_ADDRESS", "")),
+            autostart=_bool("POLYFI_AUTOSTART", False),
             session_private_key=e("POLYMARKET_SESSION_PRIVATE_KEY", ""),
             host=e("POLYFI_HOST", "127.0.0.1"),
             port=int(e("POLYFI_PORT", "8787")),
