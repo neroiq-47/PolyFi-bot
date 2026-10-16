@@ -30,6 +30,9 @@
     "POLYFI_WINDOW_SECONDS": "300",
     "POLYFI_FREE_ONLY": "true",
     "POLYFI_STAKE_USD": "5",
-    "POLYFI_MAX_DAILY_LOSS_USD": "25"
+    "POLYFI_MAX_DAILY_LOSS_USD": "25",
+    // Public identifiers (safe to commit). Keys/secrets go in Settings → Variables and Secrets.
+    "POLYMARKET_RELAYER_API_KEY_ADDRESS": "0x554bb7c00683f8628dd8b268821009eac218f216",
+    "POLYMARKET_BUILDER_CODE": "0x29e86cba8157e0d4ac968bac6a8a0d0baae3230da8191e753dde2fe2d69a22a4"
   }
 }

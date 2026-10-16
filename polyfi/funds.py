@@ -13,8 +13,12 @@ from .config import POLYGON_CHAIN_ID, USDC_POLYGON
 BRIDGE = "https://bridge.polymarket.com"
 
 
-async def deposit_addresses(wallet: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as http:
+def _headers(builder_code: str | None) -> dict:
+    return {"X-Builder-Code": builder_code} if builder_code else {}
+
+
+async def deposit_addresses(wallet: str, builder_code: str | None = None) -> dict:
+    async with httpx.AsyncClient(timeout=10, headers=_headers(builder_code)) as http:
         r = await http.post(f"{BRIDGE}/deposit", json={"address": wallet})
         r.raise_for_status()
         return r.json().get("address", {})
@@ -26,7 +30,7 @@ async def withdraw_usdc_polygon(gateway, wallet: str, recipient: str, amount_usd
         raise ValueError("minimum withdrawal is $2")
     if not (recipient.startswith("0x") and len(recipient) == 42):
         raise ValueError("recipient must be a 0x… Polygon address")
-    async with httpx.AsyncClient(timeout=15) as http:
+    async with httpx.AsyncClient(timeout=15, headers=_headers(getattr(gateway, "builder_code", None))) as http:
         r = await http.post(
             f"{BRIDGE}/withdraw",
             json={

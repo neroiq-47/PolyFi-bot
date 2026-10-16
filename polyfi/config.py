@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -23,6 +24,13 @@ def _load_dotenv(path: Path) -> None:
             continue
         key, _, value = line.partition("=")
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def _builder_code(value: str) -> str:
+    value = value.strip()
+    if value and not re.fullmatch(r"0x[0-9a-fA-F]{64}", value):
+        raise ValueError("POLYMARKET_BUILDER_CODE must be 0x followed by 64 hex characters")
+    return value.lower()
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -59,6 +67,8 @@ class Settings:
     wallet_address: str = ""
     relayer_api_key: str = field(default="", repr=False)
     relayer_api_key_address: str = ""
+    # Public builder code (bytes32 hex) — attributes orders and bridge transfers to your app.
+    builder_code: str = ""
     # Optional: trade with a scoped session key instead (cannot withdraw). See polyfi/session_key.py
     session_private_key: str = field(default="", repr=False)
 
@@ -90,6 +100,7 @@ class Settings:
             wallet_address=e("POLYMARKET_WALLET_ADDRESS", ""),
             relayer_api_key=e("POLYMARKET_RELAYER_API_KEY", ""),
             relayer_api_key_address=e("POLYMARKET_RELAYER_API_KEY_ADDRESS", ""),
+            builder_code=_builder_code(e("POLYMARKET_BUILDER_CODE", "")),
             session_private_key=e("POLYMARKET_SESSION_PRIVATE_KEY", ""),
             host=e("POLYFI_HOST", "127.0.0.1"),
             port=int(e("POLYFI_PORT", "8787")),

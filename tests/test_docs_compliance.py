@@ -111,3 +111,30 @@ async def test_restart_rejection_pauses_without_using_attempts(eng):
 async def test_withdraw_minimum_matches_bridge():
     with pytest.raises(ValueError, match=r"\$2"):
         await funds.withdraw_usdc_polygon(None, "0x" + "1" * 40, "0x" + "2" * 40, 1.5)
+
+
+def test_builder_code_validated_and_normalized(monkeypatch):
+    from polyfi.config import Settings
+
+    code = "0x29E86CBA8157E0D4AC968BAC6A8A0D0BAAE3230DA8191E753DDE2FE2D69A22A4"
+    monkeypatch.setenv("POLYMARKET_BUILDER_CODE", code)
+    assert Settings.from_env(env_file=None).builder_code == code.lower()
+    assert "builder_code" in Settings.from_env(env_file=None).public()  # public identifier, not a secret
+    monkeypatch.setenv("POLYMARKET_BUILDER_CODE", "0x1234")
+    with pytest.raises(ValueError):
+        Settings.from_env(env_file=None)
+
+
+async def test_live_orders_carry_builder_code():
+    from polyfi.gateways import LiveGateway
+
+    calls = []
+
+    class Client:
+        async def place_limit_order(self, **kw):
+            calls.append(kw)
+            return NS(ok=True, order_id="o1")
+
+    gw = LiveGateway(Client(), builder_code="0x" + "ab" * 32)
+    assert await gw.buy_maker("111", 0.56, 10) == "o1"
+    assert calls[0]["builder_code"] == "0x" + "ab" * 32 and calls[0]["post_only"] is True
