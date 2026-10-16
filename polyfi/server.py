@@ -9,6 +9,7 @@ import hmac
 import logging
 import math
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -18,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from . import funds
 from .config import Settings
 from .engine import Engine
-from .feeds import CoinbaseFeed, DemoFeed
+from .feeds import CoinbaseFeed, DemoFeed, FallbackFeed, KrakenFeed
 from .gateways import DemoGateway, LiveGateway, PaperGateway
 from .store import Store
 from .streams import ChainlinkFeed
@@ -35,17 +36,22 @@ def _hostname(host: str) -> str:
 log = logging.getLogger("polyfi")
 
 
+def exchange_feed() -> FallbackFeed:
+    """Coinbase first, Kraken if Coinbase is unreachable from this server (e.g. datacenter IPs)."""
+    return FallbackFeed(CoinbaseFeed(), KrakenFeed())
+
+
 async def build_engine(settings: Settings) -> Engine:
     store = Store(settings.db_path)
     if settings.mode == "demo":
         feed = DemoFeed()
         gateway = DemoGateway(feed, settings)
     elif settings.mode == "paper":
-        feed, gateway = CoinbaseFeed(), PaperGateway()
+        feed, gateway = exchange_feed(), PaperGateway()
     elif settings.mode == "live":
         gateway = await LiveGateway.connect(settings)
         # Chainlink is what these markets resolve on; Coinbase covers gaps.
-        feed = ChainlinkFeed(gateway._client, fallback=CoinbaseFeed())
+        feed = ChainlinkFeed(gateway._client, fallback=exchange_feed())
         feed.start()
     else:
         raise ValueError("POLYFI_MODE must be demo, paper or live")
@@ -57,8 +63,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        engine = await build_engine(settings)
+        try:
+            engine = await build_engine(settings)
+        except Exception as err:
+            if settings.mode != "live":
+                raise
+            # Don't crash-loop the container (dashboard would just say "unavailable"):
+            # come up in PAPER mode with the reason on screen. No real orders are possible.
+            log.error("live mode failed to start: %s", err)
+            engine = await build_engine(replace(settings, mode="paper"))
+            engine.startup_error = f"Live mode failed to start: {err} — running in PAPER mode (no real orders)."
+            engine.note(engine.startup_error, "error")
         app.state.engine = engine
+        if settings.autostart and not engine.startup_error:
+            engine.running = True
+            engine.note("autostart: trading resumed after (re)start")
         engine.start_loop()
         try:
             yield
@@ -178,8 +197,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, "amount must be a positive number")
         if not isinstance(e.gw, LiveGateway):
             raise HTTPException(400, "withdrawals only work in live mode")
+        recipient = str(body.get("recipient", "")).strip()
+        if settings.withdraw_address:
+            if recipient.lower() != settings.withdraw_address:
+                raise HTTPException(403, "withdrawals are locked to POLYFI_WITHDRAW_ADDRESS")
+        elif _hostname(settings.host.lower()) not in LOOPBACK_HOSTS:
+            # Public dashboard: a leaked token must not be able to send funds anywhere.
+            raise HTTPException(403, "set POLYFI_WITHDRAW_ADDRESS to enable withdrawals on a public dashboard")
         try:
-            result = await funds.withdraw_usdc_polygon(e.gw, e.gw.wallet, str(body.get("recipient", "")), amount)
+            result = await funds.withdraw_usdc_polygon(e.gw, e.gw.wallet, recipient, amount)
         except ValueError as err:
             raise HTTPException(400, str(err)) from err
         e.note(f"withdrew ${result['amount']:.2f} USDC (Polygon) → {result['recipient'][:10]}…")

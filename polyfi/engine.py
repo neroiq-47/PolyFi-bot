@@ -77,6 +77,10 @@ class Engine:
         self._balance: float | None = None
         self._balance_at = 0.0
         self._redeem_task: asyncio.Task | None = None
+        self._last_err, self._last_err_at, self._err_repeats = "", 0.0, 0
+        self.startup_error = ""      # e.g. live mode couldn't start; shown on the dashboard
+        self._ext_pnl: float | None = None
+        self._ext_pnl_at = 0.0
         self._paused_until = 0.0     # exchange asked us to back off (matching-engine restart etc.)
         self._restart_backoff = 0.0
 
@@ -112,8 +116,15 @@ class Engine:
                 await self.tick()
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # keep the loop alive; surface the error
-                self.note(f"tick error: {err}", "error")
+            except Exception as err:  # keep the loop alive; surface the error (once per 30s)
+                msg = f"{type(err).__name__}: {err}" if str(err) else type(err).__name__
+                now = time.time()
+                if msg != self._last_err or now - self._last_err_at >= 30:
+                    repeats = f" (repeated {self._err_repeats}×)" if self._err_repeats else ""
+                    self.note(f"tick error{repeats}: {msg}", "error")
+                    self._last_err, self._last_err_at, self._err_repeats = msg, now, 0
+                else:
+                    self._err_repeats += 1
             await asyncio.sleep(self.settings.tick_seconds)
 
     # ---- one step --------------------------------------------------------
@@ -194,6 +205,22 @@ class Engine:
         if math.isfinite(sigma) and sigma > 0:
             self._sigma = sigma
 
+    async def _exchange_pnl_today(self) -> float:
+        """Live: Polymarket's own realized PnL since UTC midnight, so the daily loss limit
+        survives restarts (the local journal is wiped with the container). Cached 60s."""
+        fn = getattr(self.gw, "realized_pnl_today", None)
+        if fn is None:
+            return 0.0
+        if self._ext_pnl is None or time.time() - self._ext_pnl_at >= 60:
+            try:
+                self._ext_pnl = await fn()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                self.note(f"couldn't read today's PnL from Polymarket: {err}", "warn")
+            self._ext_pnl_at = time.time()
+        return self._ext_pnl or 0.0
+
     # ---- balance cache ---------------------------------------------------
     async def _cached_balance(self) -> float:
         mono = time.monotonic()
@@ -243,9 +270,9 @@ class Engine:
             signal["reason"] = blocker
             return signal
 
-        stats = self.store.stats(self.gw.name)
-        if stats["today_pnl"] <= -s.max_daily_loss_usd:
-            self.halted_reason = f"daily loss limit hit (${stats['today_pnl']:.2f})"
+        today = min(self.store.stats(self.gw.name)["today_pnl"], await self._exchange_pnl_today())
+        if today <= -s.max_daily_loss_usd:
+            self.halted_reason = f"daily loss limit hit (${today:.2f})"
             self.note(self.halted_reason, "warn")
             signal["reason"] = self.halted_reason
             return signal
@@ -420,6 +447,7 @@ class Engine:
             "mode": self.gw.name,
             "running": self.running,
             "halted": self.halted_reason,
+            "startup_error": self.startup_error,
             "snapshot": snap.__dict__,
             "position": pos.__dict__ if pos else None,
             "prices": [[round(t, 1), round(p, 2)] for t, p in list(self.prices)[-600:]],

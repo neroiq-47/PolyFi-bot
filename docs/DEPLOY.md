@@ -35,10 +35,23 @@ Add the secrets under **Settings → Variables and Secrets**.
 
 ## Going live
 
-The deploy starts in **paper** mode, set by `vars.POLYFI_MODE` in `wrangler.jsonc`. To trade for real:
+The deploy starts in **paper** mode, set by `vars.POLYFI_MODE` in `wrangler.jsonc`. Before trading real money, work through this checklist.
 
-* Add the key secrets. The session-key setup is recommended, because a session key can't withdraw.
-* Change the mode to `live` and redeploy.
+**Secrets** (Settings → Variables and Secrets → type **Secret**; never put these in the repo):
+* `POLYFI_DASHBOARD_TOKEN`: a long random string.
+* Keys, as **one** of these sets:
+  * **Owner key:** `SIGNER_PRIVATE_KEY` and `POLYMARKET_RELAYER_API_KEY`. The signer address is already in `wrangler.jsonc` as `POLYMARKET_RELAYER_API_KEY_ADDRESS`.
+  * **Session key (safer, because it can't withdraw):** `POLYMARKET_SESSION_PRIVATE_KEY`.
+
+**Variables** (edit `wrangler.jsonc` and commit). Values set in the dashboard are overwritten by `wrangler.jsonc` on the next deploy:
+* `POLYMARKET_WALLET_ADDRESS`: your Polymarket account wallet, from the profile menu on polymarket.com. It's required for session keys and for legacy Safe/Proxy accounts. Without it, the bot uses the signer's own Deposit Wallet.
+* `POLYFI_WITHDRAW_ADDRESS`: the **only** address withdrawals may go to, for example your Coinbase USDC (Polygon) address. On a public dashboard, withdrawals stay disabled until this is set, so a leaked token can't send funds anywhere else.
+* `POLYFI_AUTOSTART`: set to `"true"` to resume trading automatically after a container restart or redeploy. By default a restart comes back **paused**.
+* `POLYFI_MODE`: set to `"live"` last.
+
+**Safeguards built in:**
+* **Geoblock check.** On a live start the bot asks Polymarket's geoblock endpoint whether trading is allowed from the server's location. If it isn't, the bot does **not** go live; it runs in paper mode and shows the reason on the dashboard. The same happens for any other live startup failure, such as a bad key, so the container never crash-loops.
+* **Daily loss limit.** In live mode the limit also checks Polymarket's own realized PnL since UTC midnight, so a restart, which wipes the local journal, doesn't reset it.
 
 ## Know before you go
 

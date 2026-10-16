@@ -235,8 +235,9 @@ function render(s) {
   const tg = $("toggle");
   tg.textContent = s.running ? "Pause bot" : "Start bot";
   tg.className = "btn-main" + (s.running ? " stop" : "");
-  $("halt").style.display = s.halted ? "block" : "none";
-  $("halt").textContent = s.halted ? "⛔ " + s.halted + " — press Start to re-arm." : "";
+  const warn = s.startup_error ? "⚠️ " + s.startup_error : s.halted ? "⛔ " + s.halted + " — press Start to re-arm." : "";
+  $("halt").style.display = warn ? "block" : "none";
+  $("halt").textContent = warn;
 
   $("kBal").textContent = usd(snap.balance);
   $("kToday").textContent = usd(st.today_pnl);
@@ -246,10 +247,11 @@ function render(s) {
 
   const total = cfg.window_seconds, left = Math.max(0, snap.seconds_left);
   $("arc").setAttribute("stroke-dashoffset", String(264 * (1 - left / total)));
-  $("secs").textContent = Math.floor(left / 60) + ":" + String(Math.floor(left % 60)).padStart(2, "0");
+  const hasData = snap.ts > 0 && snap.btc > 0;
+  $("secs").textContent = hasData ? Math.floor(left / 60) + ":" + String(Math.floor(left % 60)).padStart(2, "0") : "--";
   $("question").textContent = snap.question || "Waiting for market…";
   $("slug").textContent = snap.slug ? snap.slug + " · σ " + (snap.sigma * Math.sqrt(60) * 100).toFixed(3) + "%/min · price: " + (snap.source || "—") : "";
-  $("btc").textContent = usd(snap.btc);
+  $("btc").textContent = hasData ? usd(snap.btc) : "—";
   $("open").textContent = snap.open_price ? usd(snap.open_price) : "—";
   const mv = snap.open_price ? snap.btc - snap.open_price : null;
   $("move").textContent = mv == null ? "—" : (mv >= 0 ? "▲ " : "▼ ") + usd(Math.abs(mv));
