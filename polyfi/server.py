@@ -70,6 +70,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(WEB / "index.html")
 
+    @app.get("/healthz")
+    async def healthz() -> dict:
+        return {"ok": True}
+
     @app.get("/api/state", dependencies=[Depends(auth)])
     async def state(e: Engine = Depends(engine)) -> dict:
         return e.state()
