@@ -1,0 +1,24 @@
+[project]
+name = "polyfi-bot"
+version = "0.1.0"
+description = "Simple fee-free (maker-only), gasless Polymarket BTC up/down bot with a dashboard"
+requires-python = ">=3.11"
+dependencies = [
+    "polymarket-client>=0.13,<0.14",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["polyfi"]
+
+[tool.setuptools.package-data]
+polyfi = ["web/*.html"]

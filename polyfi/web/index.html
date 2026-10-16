@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolyFi Bot</title>
+<style>
+:root {
+  --purple: #7c5cff; --blue: #3b82f6; --mint: #2fd9a6;
+  --bg: #f6f5ff; --card: #ffffff; --ink: #1b1640; --muted: #6b6890; --line: #e6e3f7;
+  --up: #12b886; --down: #e5484d; --shadow: 0 6px 24px rgba(60, 40, 160, .08);
+  --grad: linear-gradient(135deg, var(--purple), var(--blue) 55%, var(--mint));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e0b24; --card: #17133a; --ink: #f1efff; --muted: #a29ccc; --line: #2a2560;
+    --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e0b24; --card: #17133a; --ink: #f1efff; --muted: #a29ccc; --line: #2a2560;
+  --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.logo { width: 38px; height: 38px; border-radius: 12px; background: var(--grad); display: grid; place-items: center; color: #fff; font-weight: 800; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+.badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .04em; background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
+.badge.live { background: color-mix(in srgb, var(--down) 15%, transparent); color: var(--down); }
+.badge.free { background: color-mix(in srgb, var(--mint) 20%, transparent); color: #0f9d76; }
+.spacer { flex: 1; }
+button { font: inherit; border: 0; border-radius: 12px; padding: 10px 18px; cursor: pointer; font-weight: 650; }
+.btn-main { background: var(--grad); color: #fff; min-width: 130px; box-shadow: var(--shadow); }
+.btn-main.stop { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 8px 12px; }
+.grid { display: grid; gap: 14px; }
+.kpis { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
+.main { grid-template-columns: 1.55fr 1fr; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.kpi .value { font-size: 26px; font-weight: 750; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.pos { color: var(--up); } .neg { color: var(--down); }
+h2 { font-size: 13px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.window-top { display: flex; gap: 16px; align-items: center; }
+.ring { width: 86px; height: 86px; flex: none; }
+.q { font-weight: 650; font-size: 16px; }
+.sub { color: var(--muted); font-size: 13px; }
+.prices { display: flex; gap: 22px; margin: 14px 0 10px; flex-wrap: wrap; }
+.prices .big { font-size: 24px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.bar { height: 14px; border-radius: 999px; background: color-mix(in srgb, var(--down) 25%, var(--line)); overflow: hidden; position: relative; }
+.bar > div { height: 100%; background: linear-gradient(90deg, var(--mint), var(--blue)); transition: width .4s; }
+.bar-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.books { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.book { border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.book b { font-size: 13px; }
+.book .row { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; font-size: 14px; }
+.signal { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--blue) 10%, transparent); font-size: 14px; }
+canvas { width: 100%; height: 220px; display: block; }
+label.f { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+label.f:last-of-type { border-bottom: 0; }
+input[type=number], input[type=text] { font: inherit; width: 110px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+input[type=text] { width: 100%; }
+.switch { position: relative; width: 46px; height: 26px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: .2s; cursor: pointer; }
+.switch span::after { content: ""; position: absolute; width: 20px; height: 20px; top: 3px; left: 3px; border-radius: 50%; background: #fff; transition: .2s; }
+.switch input:checked + span { background: var(--mint); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs button { padding: 7px 14px; background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.tabs button.on { background: var(--grad); color: #fff; border-color: transparent; }
+.paybtn { width: 100%; background: #000; color: #fff; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; border-radius: 12px; padding: 11px; font-weight: 650; }
+.alt { width: 100%; background: color-mix(in srgb, var(--mint) 18%, transparent); color: var(--ink); margin: 6px 0; display: block; text-align: center; text-decoration: none; border-radius: 12px; padding: 11px; font-weight: 650; }
+.note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+.addr { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; background: var(--bg); padding: 8px; border-radius: 10px; margin: 6px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.scroll { overflow-x: auto; }
+.pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 650; }
+.pill.won { background: color-mix(in srgb, var(--up) 15%, transparent); color: var(--up); }
+.pill.lost { background: color-mix(in srgb, var(--down) 15%, transparent); color: var(--down); }
+.pill.other { background: var(--line); color: var(--muted); }
+.log { max-height: 220px; overflow: auto; font-size: 13px; }
+.log div { padding: 5px 0; border-bottom: 1px dashed var(--line); }
+.log .t { color: var(--muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
+.log .error { color: var(--down); } .log .warn { color: #c98a00; }
+.warnbox { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--ink); font-size: 14px; display: none; }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; opacity: 0; transition: .3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+@media (max-width: 860px) { .main { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">P</div>
+    <h1>PolyFi Bot</h1>
+    <span id="mode" class="badge">DEMO</span>
+    <span id="freeBadge" class="badge free">FREE MODE · $0 FEES</span>
+    <div class="spacer"></div>
+    <button class="btn-ghost" id="theme" title="Toggle theme">◐</button>
+    <button class="btn-main" id="toggle">Start bot</button>
+  </header>
+
+  <div class="warnbox" id="halt"></div>
+
+  <section class="grid kpis">
+    <div class="card kpi"><div class="label">Balance</div><div class="value" id="kBal">—</div></div>
+    <div class="card kpi"><div class="label">Today P&amp;L</div><div class="value" id="kToday">—</div></div>
+    <div class="card kpi"><div class="label">Win rate</div><div class="value" id="kWin">—</div></div>
+    <div class="card kpi"><div class="label">Fees paid</div><div class="value" id="kFees">—</div></div>
+  </section>
+
+  <section class="grid main">
+    <div class="grid">
+      <div class="card">
+        <h2>Live window</h2>
+        <div class="window-top">
+          <svg class="ring" viewBox="0 0 100 100" aria-label="time left in window">
+            <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset=".6" stop-color="#3b82f6"/><stop offset="1" stop-color="#2fd9a6"/></linearGradient></defs>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--line)" stroke-width="9"/>
+            <circle id="arc" cx="50" cy="50" r="42" fill="none" stroke="url(#g)" stroke-width="9" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+            <text id="secs" x="50" y="56" text-anchor="middle" font-size="20" font-weight="700" fill="var(--ink)">--</text>
+          </svg>
+          <div>
+            <div class="q" id="question">Waiting for market…</div>
+            <div class="sub" id="slug"></div>
+          </div>
+        </div>
+        <div class="prices">
+          <div><div class="sub">BTC now</div><div class="big" id="btc">—</div></div>
+          <div><div class="sub">Price to beat</div><div class="big" id="open">—</div></div>
+          <div><div class="sub">Move</div><div class="big" id="move">—</div></div>
+        </div>
+        <div class="bar"><div id="pbar" style="width:50%"></div></div>
+        <div class="bar-labels"><span id="pUp">Up 50%</span><span>bot's fair odds</span><span id="pDown">Down 50%</span></div>
+        <div class="books">
+          <div class="book"><b class="pos">UP</b><div class="row"><span>bid</span><span id="upBid">—</span></div><div class="row"><span>ask</span><span id="upAsk">—</span></div></div>
+          <div class="book"><b class="neg">DOWN</b><div class="row"><span>bid</span><span id="dnBid">—</span></div><div class="row"><span>ask</span><span id="dnAsk">—</span></div></div>
+        </div>
+        <div class="signal" id="signal">—</div>
+      </div>
+      <div class="card">
+        <h2>BTC · last 10 minutes</h2>
+        <canvas id="chart"></canvas>
+      </div>
+      <div class="card">
+        <h2>Trades</h2>
+        <div class="scroll"><table>
+          <thead><tr><th>Time</th><th>Side</th><th>Type</th><th>Price</th><th>Shares</th><th>Fee</th><th>Result</th><th>P&amp;L</th></tr></thead>
+          <tbody id="trades"><tr><td colspan="8" class="sub">No trades yet</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="grid" style="align-content:start">
+      <div class="card">
+        <h2>Settings</h2>
+        <label class="f"><span><b>Free only</b><br><span class="sub">Maker orders: $0 fees + rebates</span></span>
+          <span class="switch"><input type="checkbox" id="free_only"><span></span></span></label>
+        <label class="f">Stake per trade ($)<input type="number" id="stake_usd" min="1" step="1"></label>
+        <label class="f">Min edge (¢)<input type="number" id="min_edge" min="1" step="1"></label>
+        <label class="f">Daily loss limit ($)<input type="number" id="max_daily_loss_usd" min="1" step="1"></label>
+        <label class="f">Wait after open (s)<input type="number" id="entry_after_s" min="0" step="5"></label>
+        <label class="f">Stop before close (s)<input type="number" id="stop_before_end_s" min="0" step="5"></label>
+        <button class="btn-main" id="save" style="width:100%;margin-top:10px">Save settings</button>
+      </div>
+
+      <div class="card">
+        <h2>Money</h2>
+        <div class="tabs"><button class="on" data-tab="dep">Deposit</button><button data-tab="wd">Withdraw</button></div>
+        <div id="tab-dep">
+          <a class="alt" href="https://www.coinbase.com/" target="_blank" rel="noopener">★ Free: Bank → Coinbase → USDC (Polygon)</a>
+          <a class="paybtn" href="https://polymarket.com/" target="_blank" rel="noopener"> Pay with Apple&nbsp;Pay</a>
+          <p class="note">Apple Pay goes through a card processor (≈2.5–5% fee). The $0 route: buy USDC in Coinbase from your bank balance (USD→USDC is 1:1), then send it on the <b>Polygon</b> network to your deposit address below.</p>
+          <div id="depAddr" class="note">Deposit addresses appear here in live mode.</div>
+        </div>
+        <div id="tab-wd" style="display:none">
+          <label class="f" style="display:block">Coinbase USDC address (Polygon)<input type="text" id="wdTo" placeholder="0x…"></label>
+          <label class="f">Amount ($)<input type="number" id="wdAmt" min="1" step="1"></label>
+          <button class="btn-main" id="wdGo" style="width:100%;margin-top:10px">Withdraw — $0 fee</button>
+          <p class="note">Gasless transfer through Polymarket's relayer, paid out as native USDC on Polygon. In Coinbase, USDC→USD and bank (ACH) withdrawals are free.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Activity</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const usd = (v, d = 2) => v == null ? "—" : (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const cents = (v) => v == null ? "—" : (v * 100).toFixed(0) + "¢";
+let token = "";
+try { token = localStorage.getItem("polyfiToken") || ""; } catch (e) {}
+let settingsLoaded = false, last = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Polyfi-Token": token, ...(opts.headers || {}) } });
+  if (res.status === 401) {
+    token = prompt("Dashboard token") || "";
+    try { localStorage.setItem("polyfiToken", token); } catch (e) {}
+    throw new Error("auth");
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || res.statusText);
+  return data;
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+
+function render(s) {
+  last = s;
+  const snap = s.snapshot, st = s.stats, cfg = s.settings;
+  $("mode").textContent = s.mode.toUpperCase();
+  $("mode").className = "badge" + (s.mode === "live" ? " live" : "");
+  $("freeBadge").style.display = cfg.free_only ? "" : "none";
+  const tg = $("toggle");
+  tg.textContent = s.running ? "Pause bot" : "Start bot";
+  tg.className = "btn-main" + (s.running ? " stop" : "");
+  $("halt").style.display = s.halted ? "block" : "none";
+  $("halt").textContent = s.halted ? "⛔ " + s.halted + " — press Start to re-arm." : "";
+
+  $("kBal").textContent = usd(snap.balance);
+  $("kToday").textContent = usd(st.today_pnl);
+  $("kToday").className = "value " + (st.today_pnl > 0 ? "pos" : st.today_pnl < 0 ? "neg" : "");
+  $("kWin").textContent = st.win_rate == null ? "—" : Math.round(st.win_rate * 100) + "% · " + st.trades;
+  $("kFees").textContent = usd(st.fees);
+
+  const total = cfg.window_seconds, left = Math.max(0, snap.seconds_left);
+  $("arc").setAttribute("stroke-dashoffset", String(264 * (1 - left / total)));
+  $("secs").textContent = Math.floor(left / 60) + ":" + String(Math.floor(left % 60)).padStart(2, "0");
+  $("question").textContent = snap.question || "Waiting for market…";
+  $("slug").textContent = snap.slug ? snap.slug + " · σ " + (snap.sigma * Math.sqrt(60) * 100).toFixed(3) + "%/min · price: " + (snap.source || "—") : "";
+  $("btc").textContent = usd(snap.btc);
+  $("open").textContent = snap.open_price ? usd(snap.open_price) : "—";
+  const mv = snap.open_price ? snap.btc - snap.open_price : null;
+  $("move").textContent = mv == null ? "—" : (mv >= 0 ? "▲ " : "▼ ") + usd(Math.abs(mv));
+  $("move").className = "big " + (mv == null ? "" : mv >= 0 ? "pos" : "neg");
+  $("pbar").style.width = (snap.p_up * 100).toFixed(1) + "%";
+  $("pUp").textContent = "Up " + Math.round(snap.p_up * 100) + "%";
+  $("pDown").textContent = "Down " + Math.round((1 - snap.p_up) * 100) + "%";
+  $("upBid").textContent = cents(snap.up.bid); $("upAsk").textContent = cents(snap.up.ask);
+  $("dnBid").textContent = cents(snap.down.bid); $("dnAsk").textContent = cents(snap.down.ask);
+  const sig = snap.signal || {};
+  let text = sig.side ? `Signal: BUY ${sig.side} at ${cents(sig.price)} (edge ${(sig.edge * 100).toFixed(1)}¢)` : "No edge right now";
+  if (sig.reason && sig.action !== "entered") text += " · " + sig.reason;
+  if (s.position) text = `Position: ${s.position.side} ${s.position.filled}/${s.position.size} @ ${cents(s.position.price)}` + (s.position.resting ? " (resting maker order)" : "");
+  $("signal").textContent = text;
+
+  if (!settingsLoaded) {
+    $("free_only").checked = cfg.free_only;
+    $("stake_usd").value = cfg.stake_usd;
+    $("min_edge").value = Math.round(cfg.min_edge * 100);
+    $("max_daily_loss_usd").value = cfg.max_daily_loss_usd;
+    $("entry_after_s").value = cfg.entry_after_s;
+    $("stop_before_end_s").value = cfg.stop_before_end_s;
+    settingsLoaded = true;
+  }
+
+  $("trades").innerHTML = s.trades.length ? s.trades.map((t) => {
+    const cls = t.status === "won" ? "won" : t.status === "lost" ? "lost" : "other";
+    return `<tr><td>${new Date(t.created_at * 1000).toLocaleTimeString()}</td><td class="${t.side === "UP" ? "pos" : "neg"}">${t.side}</td><td>${t.kind}</td><td>${cents(t.price)}</td><td>${(+t.shares).toFixed(2)}</td><td>${usd(t.fee, 3)}</td><td><span class="pill ${cls}">${t.status}</span></td><td class="${t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""}">${t.pnl == null ? "—" : usd(t.pnl)}</td></tr>`;
+  }).join("") : '<tr><td colspan="8" class="sub">No trades yet</td></tr>';
+
+  $("log").innerHTML = s.events.map((e) => `<div class="${e.level}"><span class="t">${new Date(e.ts * 1000).toLocaleTimeString()}</span>${e.msg.replace(/</g, "&lt;")}</div>`).join("");
+  drawChart(s.prices, snap.open_price);
+}
+
+function drawChart(points, openPrice) {
+  const c = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const ctx = c.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+  if (points.length < 2) return;
+  const css = getComputedStyle(document.documentElement);
+  const vals = points.map((p) => p[1]).concat(openPrice ? [openPrice] : []);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi - lo) * 0.15 || 5; lo -= pad; hi += pad;
+  const t0 = points[0][0], t1 = points[points.length - 1][0];
+  const x = (t) => 8 + (w - 70) * (t - t0) / Math.max(1, t1 - t0);
+  const y = (v) => 8 + (h - 24) * (1 - (v - lo) / (hi - lo));
+  ctx.font = "11px -apple-system, sans-serif"; ctx.fillStyle = css.getPropertyValue("--muted");
+  for (let i = 0; i <= 3; i++) { const v = lo + (hi - lo) * i / 3; ctx.fillText("$" + Math.round(v).toLocaleString(), w - 58, y(v) + 4); }
+  if (openPrice) {
+    ctx.strokeStyle = css.getPropertyValue("--purple"); ctx.setLineDash([5, 5]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(8, y(openPrice)); ctx.lineTo(w - 64, y(openPrice)); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, "#7c5cff"); grad.addColorStop(0.55, "#3b82f6"); grad.addColorStop(1, "#2fd9a6");
+  ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.lineJoin = "round"; ctx.beginPath();
+  points.forEach((p, i) => (i ? ctx.lineTo(x(p[0]), y(p[1])) : ctx.moveTo(x(p[0]), y(p[1]))));
+  ctx.stroke();
+  const lp = points[points.length - 1];
+  ctx.fillStyle = "#2fd9a6"; ctx.beginPath(); ctx.arc(x(lp[0]), y(lp[1]), 4, 0, 7); ctx.fill();
+}
+
+async function poll() {
+  try { render(await api("/api/state")); } catch (e) { if (e.message !== "auth") console.warn(e); }
+}
+
+$("toggle").onclick = async () => {
+  try { await api(last && last.running ? "/api/bot/stop" : "/api/bot/start", { method: "POST" }); poll(); } catch (e) { toast(e.message); }
+};
+$("save").onclick = async () => {
+  const body = {
+    free_only: $("free_only").checked,
+    stake_usd: +$("stake_usd").value,
+    min_edge: +$("min_edge").value / 100,
+    max_daily_loss_usd: +$("max_daily_loss_usd").value,
+    entry_after_s: +$("entry_after_s").value,
+    stop_before_end_s: +$("stop_before_end_s").value,
+  };
+  try { await api("/api/settings", { method: "POST", body: JSON.stringify(body) }); toast("Settings saved"); poll(); } catch (e) { toast(e.message); }
+};
+document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  $("tab-dep").style.display = b.dataset.tab === "dep" ? "" : "none";
+  $("tab-wd").style.display = b.dataset.tab === "wd" ? "" : "none";
+});
+$("wdGo").onclick = async () => {
+  const amount = +$("wdAmt").value, recipient = $("wdTo").value.trim();
+  if (!confirm(`Withdraw $${amount} as USDC on Polygon to ${recipient}?`)) return;
+  try { await api("/api/withdraw", { method: "POST", body: JSON.stringify({ amount, recipient }) }); toast("Withdrawal sent"); } catch (e) { toast(e.message); }
+};
+$("theme").onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("polyfiTheme", root.dataset.theme); } catch (e) {}
+  if (last) drawChart(last.prices, last.snapshot.open_price);
+};
+try { const th = localStorage.getItem("polyfiTheme"); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+
+async function loadDeposit() {
+  try {
+    const d = await api("/api/deposit");
+    if (d.mode !== "live" || !d.wallet) return;
+    const a = d.addresses || {};
+    $("depAddr").innerHTML = (a.evm ? `<b>Send USDC here (Polygon network)</b><div class="addr">${a.evm}</div>` : "") +
+      `<span>Trading wallet (info only): ${d.wallet}</span>`;
+  } catch (e) {}
+}
+poll(); loadDeposit();
+setInterval(poll, 1000);
+window.addEventListener("resize", () => last && drawChart(last.prices, last.snapshot.open_price));
+</script>
+</body>
+</html>
