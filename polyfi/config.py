@@ -51,12 +51,15 @@ class Settings:
     max_daily_loss_usd: float = 25.0
     vol_lookback_min: int = 60
     tick_seconds: float = 1.0
+    record_ticks: bool = True       # paper/live: save ticks for backtesting
 
     # Live credentials (never sent to the browser)
     signer_private_key: str = field(default="", repr=False)
     wallet_address: str = ""
     relayer_api_key: str = field(default="", repr=False)
     relayer_api_key_address: str = ""
+    # Optional: trade with a scoped session key instead (cannot withdraw). See polyfi/session_key.py
+    session_private_key: str = field(default="", repr=False)
 
     # Dashboard
     host: str = "127.0.0.1"
@@ -81,10 +84,12 @@ class Settings:
             max_daily_loss_usd=float(e("POLYFI_MAX_DAILY_LOSS_USD", "25")),
             vol_lookback_min=int(e("POLYFI_VOL_LOOKBACK_MIN", "60")),
             tick_seconds=float(e("POLYFI_TICK_SECONDS", "1")),
+            record_ticks=_bool("POLYFI_RECORD_TICKS", True),
             signer_private_key=e("SIGNER_PRIVATE_KEY", ""),
             wallet_address=e("POLYMARKET_WALLET_ADDRESS", ""),
             relayer_api_key=e("POLYMARKET_RELAYER_API_KEY", ""),
             relayer_api_key_address=e("POLYMARKET_RELAYER_API_KEY_ADDRESS", ""),
+            session_private_key=e("POLYMARKET_SESSION_PRIVATE_KEY", ""),
             host=e("POLYFI_HOST", "127.0.0.1"),
             port=int(e("POLYFI_PORT", "8787")),
             dashboard_token=e("POLYFI_DASHBOARD_TOKEN", ""),
@@ -103,14 +108,20 @@ class Settings:
 
     def public(self) -> dict:
         data = asdict(self)
-        for secret in ("signer_private_key", "relayer_api_key", "dashboard_token"):
+        for secret in ("signer_private_key", "relayer_api_key", "dashboard_token", "session_private_key"):
             data.pop(secret, None)
         data["live_ready"] = self.live_ready
+        data["session_key"] = self.uses_session_key
         return data
 
     @property
+    def uses_session_key(self) -> bool:
+        return bool(self.session_private_key and self.wallet_address)
+
+    @property
     def live_ready(self) -> bool:
-        return bool(self.signer_private_key and self.relayer_api_key and self.relayer_api_key_address)
+        owner = bool(self.signer_private_key and self.relayer_api_key and self.relayer_api_key_address)
+        return owner or self.uses_session_key
 
     def update(self, changes: dict) -> None:
         for key, value in changes.items():

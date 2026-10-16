@@ -23,6 +23,17 @@ CREATE TABLE IF NOT EXISTS trades (
     status TEXT NOT NULL,
     pnl REAL
 );
+CREATE TABLE IF NOT EXISTS ticks (
+    ts REAL NOT NULL,
+    slug TEXT NOT NULL,
+    window_start INTEGER NOT NULL,
+    window_end INTEGER NOT NULL,
+    btc REAL NOT NULL,
+    open_price REAL NOT NULL,
+    up_bid REAL, up_ask REAL, down_bid REAL, down_ask REAL,
+    source TEXT
+);
+CREATE INDEX IF NOT EXISTS ticks_ts ON ticks(ts);
 """
 
 
@@ -43,6 +54,18 @@ class Store:
         sets = ",".join(f"{k}=?" for k in fields)
         self.db.execute(f"UPDATE trades SET {sets} WHERE id=?", [*fields.values(), trade_id])
         self.db.commit()
+
+    def add_tick(self, **row) -> None:
+        cols = ",".join(row)
+        self.db.execute(f"INSERT INTO ticks ({cols}) VALUES ({','.join('?' * len(row))})", list(row.values()))
+        self._pending = getattr(self, "_pending", 0) + 1
+        if self._pending >= 30:
+            self.db.commit()
+            self._pending = 0
+
+    def ticks(self, since: float = 0) -> list[dict]:
+        rows = self.db.execute("SELECT * FROM ticks WHERE ts>=? ORDER BY ts", (since,)).fetchall()
+        return [dict(r) for r in rows]
 
     def recent(self, limit: int = 50) -> list[dict]:
         rows = self.db.execute("SELECT * FROM trades ORDER BY id DESC LIMIT ?", (limit,)).fetchall()

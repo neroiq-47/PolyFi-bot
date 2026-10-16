@@ -30,7 +30,25 @@ Press **Start bot**. Demo mode simulates both BTC and the order book.
    * **Free:** Coinbase → buy USDC with your bank balance → send on **Polygon** to the deposit address shown in the dashboard.
    * **Apple Pay:** use the dashboard button. It costs about 2.5–5% in card processor fees.
 
+**Safer key setup (optional):** a session key lets the bot trade but **not withdraw**. Run `python -m polyfi.session_key authorize` once on a trusted machine. It reads the owner key and Builder API key from `.env.owner`, and session keys are in beta, so Polymarket must enable your Builder key first by email. Put the printed `POLYMARKET_SESSION_PRIVATE_KEY` in the bot's `.env`. In this mode you collect winnings and withdraw from polymarket.com. To cut the bot off, run `python -m polyfi.session_key revoke <address>`.
+
 Only run live where Polymarket is permitted for you. The bot does not bypass geoblocks.
+
+## Live data
+
+* **Order books** stream over Polymarket's WebSocket. If the stream goes quiet for more than 5 seconds, the bot falls back to REST.
+* **BTC price:** live mode uses **Chainlink BTC/USD** from Polymarket's price stream, which is the source these markets settle on. Coinbase fills any gaps. The dashboard shows which source is in use.
+
+## Backtesting
+
+Paper and live modes record every tick (BTC price, price to beat, both books) to SQLite. Replay them through the same engine with different settings:
+
+```bash
+python -m polyfi.backtest --db polyfi.sqlite3 --sweep        # min-edge × maker/taker grid
+python -m polyfi.backtest --db polyfi.sqlite3 --min-edge 0.05
+```
+
+Maker fills are simulated optimistically, because the replay can't see your place in the order queue. Treat maker results as an upper bound.
 
 ## Free-only mode
 

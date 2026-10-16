@@ -76,8 +76,33 @@ class Gateway:
     async def redeem_all(self) -> int:
         return 0
 
+    def watch(self, assets: tuple[str, ...]) -> None:
+        """Start streaming books for this window's assets (no-op for simulated books)."""
+
     async def close(self) -> None:
         pass
+
+
+class _Streaming:
+    """Book lookups served from the WebSocket cache, with REST as fallback."""
+
+    _client: object
+    _cache: object | None = None
+
+    def watch(self, assets: tuple[str, ...]) -> None:
+        from .streams import BookCache
+
+        if self._cache is None:
+            self._cache = BookCache()
+        self._cache.watch(self._client, assets)
+
+    async def book(self, asset: str) -> Book:
+        cached = self._cache.get(asset) if self._cache else None
+        return cached if cached is not None else await _book(self._client, asset)
+
+    async def _close_stream(self) -> None:
+        if self._cache:
+            await self._cache.close()
 
 
 class _SimFills(Gateway):
@@ -161,7 +186,7 @@ class DemoGateway(_SimFills):
         return Book(bid, min(0.99, round(bid + 0.02, 2)))
 
 
-class PaperGateway(_SimFills):
+class PaperGateway(_Streaming, _SimFills):
     """Real Polymarket markets and books via the public API; fills are simulated."""
 
     name = "paper"
@@ -175,28 +200,37 @@ class PaperGateway(_SimFills):
     async def find_market(self, slug: str, start: int, end: int) -> WindowMarket | None:
         return await _find_market(self._client, slug, start, end)
 
-    async def book(self, asset: str) -> Book:
-        return await _book(self._client, asset)
-
     async def close(self) -> None:
+        await self._close_stream()
         await self._client.close()
 
 
-class LiveGateway(Gateway):
+class LiveGateway(_Streaming, Gateway):
     """Real trading through the official ``polymarket-client`` SDK (Deposit Wallet + relayer = gasless)."""
 
     name = "live"
     simulated = False
 
-    def __init__(self, client) -> None:  # AsyncSecureClient
+    def __init__(self, client, session_key: bool = False) -> None:  # AsyncSecureClient
         self._client = client
+        self.session_key = session_key
 
     @classmethod
     async def connect(cls, settings: Settings) -> "LiveGateway":
         from polymarket import AsyncSecureClient, RelayerApiKey
 
         if not settings.live_ready:
-            raise RuntimeError("Live mode needs SIGNER_PRIVATE_KEY, POLYMARKET_RELAYER_API_KEY and _ADDRESS")
+            raise RuntimeError(
+                "Live mode needs SIGNER_PRIVATE_KEY + POLYMARKET_RELAYER_API_KEY(_ADDRESS), "
+                "or POLYMARKET_SESSION_PRIVATE_KEY + POLYMARKET_WALLET_ADDRESS"
+            )
+        if settings.uses_session_key:
+            # Scoped trading key: places/cancels orders only. Approvals were set by the owner
+            # during `python -m polyfi.session_key authorize`; redeem/withdraw stay with the owner.
+            client = await AsyncSecureClient.create(
+                private_key=settings.session_private_key, wallet=settings.wallet_address
+            )
+            return cls(client, session_key=True)
         client = await AsyncSecureClient.create(
             private_key=settings.signer_private_key,
             wallet=settings.wallet_address or None,
@@ -212,9 +246,6 @@ class LiveGateway(Gateway):
 
     async def find_market(self, slug: str, start: int, end: int) -> WindowMarket | None:
         return await _find_market(self._client, slug, start, end)
-
-    async def book(self, asset: str) -> Book:
-        return await _book(self._client, asset)
 
     async def buy_maker(self, asset: str, price: float, size: float) -> str:
         resp = await self._client.place_limit_order(
@@ -245,6 +276,8 @@ class LiveGateway(Gateway):
         return bal.balance / 1e6
 
     async def redeem_all(self) -> int:
+        if self.session_key:
+            return 0  # owner-only action; Polymarket shows winnings to claim in the app
         count = 0
         async for pos in self._client.list_positions(status="REDEEMABLE").iter_items():
             if float(pos.current_size) <= 0:
@@ -255,12 +288,15 @@ class LiveGateway(Gateway):
         return count
 
     async def transfer_pusd(self, to_address: str, amount_usd: float):
+        if self.session_key:
+            raise ValueError("session keys cannot withdraw — withdraw from polymarket.com or run with the owner key")
         handle = await self._client.transfer_erc20(
             token_address=PUSD_ADDRESS, recipient_address=to_address, amount=int(round(amount_usd * 1e6))
         )
         return await handle.wait()
 
     async def close(self) -> None:
+        await self._close_stream()
         await self._client.close()
 
 

@@ -19,6 +19,7 @@ from .engine import Engine
 from .feeds import CoinbaseFeed, DemoFeed
 from .gateways import DemoGateway, LiveGateway, PaperGateway
 from .store import Store
+from .streams import ChainlinkFeed
 
 WEB = Path(__file__).parent / "web"
 log = logging.getLogger("polyfi")
@@ -32,7 +33,10 @@ async def build_engine(settings: Settings) -> Engine:
     elif settings.mode == "paper":
         feed, gateway = CoinbaseFeed(), PaperGateway()
     elif settings.mode == "live":
-        feed, gateway = CoinbaseFeed(), await LiveGateway.connect(settings)
+        gateway = await LiveGateway.connect(settings)
+        # Chainlink is what these markets resolve on; Coinbase covers gaps.
+        feed = ChainlinkFeed(gateway._client, fallback=CoinbaseFeed())
+        feed.start()
     else:
         raise ValueError("POLYFI_MODE must be demo, paper or live")
     return Engine(settings, feed, gateway, store)

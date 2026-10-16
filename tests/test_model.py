@@ -57,3 +57,15 @@ def test_taker_mode_accounts_for_fee():
 def test_down_side_selected_when_price_below_open():
     d = decide(0.25, 0.20, 0.22, 0.60, 0.62, min_edge=0.04, free_only=True)
     assert d.side == "DOWN"
+
+
+def test_live_ready_with_owner_or_session_key_and_secrets_hidden():
+    from polyfi.config import Settings
+
+    assert not Settings().live_ready
+    owner = Settings(signer_private_key="k", relayer_api_key="r", relayer_api_key_address="0xabc")
+    assert owner.live_ready and not owner.uses_session_key
+    sess = Settings(session_private_key="s", wallet_address="0xwallet")
+    assert sess.live_ready and sess.uses_session_key
+    pub = sess.public()
+    assert "session_private_key" not in pub and "signer_private_key" not in pub and pub["session_key"]

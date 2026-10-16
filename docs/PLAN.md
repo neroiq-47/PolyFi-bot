@@ -42,11 +42,13 @@ Polymarket Gamma (btc-updown-5m-<t>) ───┘        │                    
 ## Roadmap
 
 1. ✅ Demo, paper and live modes; maker-only "free" mode; gasless approvals, redeem and withdraw; dashboard.
-2. Swap REST polling for WebSocket streams (`client.subscribe([MarketSpec(...)])`) to cut latency.
-3. Use the Chainlink BTC/USD feed for S₀ and S, to match resolution exactly.
-4. Add 15-minute markets and ETH/SOL with the same engine (`POLYFI_WINDOW_SECONDS=900`, `POLYFI_ASSET=eth`).
-5. Use session keys (scoped, time-limited signer) so the main wallet key never sits on the bot server.
-6. Add a backtest harness on recorded books and fills.
+2. ✅ WebSocket order-book streaming (`MarketSpec`), with REST fallback.
+3. ✅ Chainlink BTC/USD (`CryptoPriceSpec`, provider `chainlink`) as the live price source, with Coinbase fallback.
+4. ✅ Session keys: a scoped signer that can trade but cannot withdraw (beta; needs Polymarket to enable your Builder key).
+5. ✅ Tick recorder plus replay backtester with a parameter sweep.
+6. Add 15-minute markets and ETH/SOL with the same engine (`POLYFI_WINDOW_SECONDS=900`, `POLYFI_ASSET=eth`), with multiple markets in parallel.
+7. Model queue position in the backtester for realistic maker fills.
+8. Check against market rules whether resolution uses the Chainlink spot or the 60-second TWAP (`CryptoTwapPriceSpec` is available), and switch S₀/S if needed.
 
 ## Sources
 

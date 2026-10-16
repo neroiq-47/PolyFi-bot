@@ -238,7 +238,7 @@ function render(s) {
   $("arc").setAttribute("stroke-dashoffset", String(264 * (1 - left / total)));
   $("secs").textContent = Math.floor(left / 60) + ":" + String(Math.floor(left % 60)).padStart(2, "0");
   $("question").textContent = snap.question || "Waiting for market…";
-  $("slug").textContent = snap.slug ? snap.slug + " · σ " + (snap.sigma * Math.sqrt(60) * 100).toFixed(3) + "%/min" : "";
+  $("slug").textContent = snap.slug ? snap.slug + " · σ " + (snap.sigma * Math.sqrt(60) * 100).toFixed(3) + "%/min · price: " + (snap.source || "—") : "";
   $("btc").textContent = usd(snap.btc);
   $("open").textContent = snap.open_price ? usd(snap.open_price) : "—";
   const mv = snap.open_price ? snap.btc - snap.open_price : null;

@@ -54,6 +54,7 @@ class Snapshot:
     down: dict = field(default_factory=dict)
     signal: dict = field(default_factory=dict)
     balance: float = 0.0
+    source: str = ""
 
 
 class Engine:
@@ -121,7 +122,8 @@ class Engine:
 
         w = self.window
         seconds_left = end - now
-        snap = Snapshot(ts=now, btc=btc, sigma=self._sigma, seconds_left=seconds_left)
+        snap = Snapshot(ts=now, btc=btc, sigma=self._sigma, seconds_left=seconds_left,
+                        source=getattr(self.feed, "last_source", self.feed.name))
         snap.balance = await self.gw.balance()
         if w is None:
             snap.signal = {"action": "waiting", "reason": "no Polymarket market for this window"}
@@ -132,6 +134,10 @@ class Engine:
         up, down = await self.gw.book(w.market.up_asset), await self.gw.book(w.market.down_asset)
         snap.open_price, snap.p_up, snap.slug, snap.question = w.open_price, p_up, w.market.slug, w.market.question
         snap.up, snap.down = _book_dict(up), _book_dict(down)
+        if self.settings.record_ticks and self.gw.name in ("paper", "live"):
+            self.store.add_tick(ts=now, slug=w.market.slug, window_start=w.market.start, window_end=w.market.end,
+                                btc=btc, open_price=w.open_price, up_bid=up.bid, up_ask=up.ask,
+                                down_bid=down.bid, down_ask=down.ask, source=snap.source)
 
         await self._manage_position(p_up, up, down, seconds_left)
         snap.signal = await self._maybe_enter(p_up, up, down, now - start, seconds_left)
@@ -147,6 +153,7 @@ class Engine:
         self._lookup_at = 0.0
         open_price = await self.feed.open_at(start) or await self.feed.spot()
         self.window = WindowState(market, open_price)
+        self.gw.watch((market.up_asset, market.down_asset))
         self.note(f"new window {slug} — price to beat ${open_price:,.2f}")
 
     async def _maybe_enter(self, p_up: float, up: Book, down: Book, elapsed: float, left: float) -> dict:
