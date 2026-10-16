@@ -39,4 +39,5 @@ The deploy starts in **paper** mode, set by `vars.POLYFI_MODE` in `wrangler.json
 * **The dashboard is public.** Only the token protects it, so make it long. For a second lock, put the URL behind **Cloudflare Access** (Zero Trust → Access → Applications). It's free for up to 50 users.
 * **Container disk is temporary.** The trade journal and recorded ticks (`/data/polyfi.sqlite3`) are wiped when the container restarts or redeploys. Your money and positions are safe, because they live on Polymarket, not in the container.
 * **Location.** Cloudflare decides where the container runs. Polymarket blocks some regions, so live orders can be rejected depending on that location. Its terms apply to you as the user, wherever the server runs. The bot does not route around geoblocks.
+* **"A request to the Cloudflare API (/accounts/…/containers/me) failed"** at the end of a deploy means the account isn't on Workers Paid yet. The image builds and the Worker uploads, but the container can't be registered. Upgrade, then retry the build.
 * **Logs.** Go to Workers & Pages → Containers → polyfi-bot in the dashboard, or run `npx wrangler tail`.
