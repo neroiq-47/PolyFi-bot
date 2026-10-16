@@ -3,7 +3,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 interface Env {
-  POLYFI: DurableObjectNamespace<PolyFi>;
+  POLYFI: DurableObjectNamespace<BotContainer>;
   [key: string]: unknown;
 }
 
@@ -28,7 +28,7 @@ const PASSTHROUGH = [
   "POLYMARKET_SESSION_PRIVATE_KEY",
 ];
 
-export class PolyFi extends DurableObject<Env> {
+export class BotContainer extends DurableObject<Env> {
   // True once /healthz has answered for the current container run; steady-state
   // requests then go straight through without an extra health check.
   private ready = false;

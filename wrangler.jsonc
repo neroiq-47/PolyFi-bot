@@ -7,7 +7,7 @@
 
   "containers": [
     {
-      "class_name": "PolyFi",
+      "class_name": "BotContainer",
       "image": "./Dockerfile",
       // 1/4 vCPU, 1 GiB. "lite" (256 MiB) is cheaper but tight for Python + the SDK.
       "instance_type": "basic",
@@ -15,10 +15,10 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "POLYFI", "class_name": "PolyFi" }]
+    "bindings": [{ "name": "POLYFI", "class_name": "BotContainer" }]
   },
   "exports": {
-    "PolyFi": { "type": "durable-object", "storage": "sqlite" }
+    "BotContainer": { "type": "durable-object", "storage": "sqlite" }
   },
 
   // Keep-alive ping every minute so the bot runs 24/7.
