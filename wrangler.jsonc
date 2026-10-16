@@ -19,8 +19,9 @@
   },
   "exports": {
     "BotContainer": { "type": "durable-object", "storage": "sqlite" },
-    // Retired: the old class name (its namespace was provisioned by an earlier deploy).
-    "PolyFi": { "type": "durable-object", "state": "deleted" }
+    // Legacy empty class, kept until no deployed version binds it; then switch to
+    // { "type": "durable-object", "state": "deleted" } and drop it from worker/index.ts.
+    "PolyFi": { "type": "durable-object", "storage": "sqlite" }
   },
 
   // Keep-alive ping every minute so the bot runs 24/7.
